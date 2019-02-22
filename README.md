@@ -1,20 +1,33 @@
 # Amazon Connect Real-time Transcription Lambda
 
-This repository contains Lambda code that demonstrates how to setup real-time transcription of Amazon Connect calls using AWS Kinesis Video Streams and AWS Transcribe. This Lambda is a part of the AWS blog post [“Real-Time Transcription of Amazon Connect Calls”](https://aws.amazon.com/blogs/machine-learning/).
+Making it easy to get started with Amazon Connect live audio streaming and real-time transcription using Amazon Transcribe.
+
+## On this Page
+- [Project Overview](#project-overview)
+- [Solution Overview](#solution-overview)
+- [Architecture Overview](#architecture-overview)
+- [Deployment](#deployment)
+- [Navigate](#navigate)
+
+## Project Overview
+The purpose of this project is to provide a code example and a fully functional Lambda function to get you started with capturing and transcribing Amzon Connect phone calls using Kinesis Video Streams and Amazon Transcribe. This Lambda function can be used to create varying solutions such as capturing audio in the IVR, providing real-time transcription to agents, or even creating a voicemail solution for Amazon Connect. To enable these different use-cases, there are multiple envirnment variables controlling the behavior of the Lambda Function: [“environment variables”](#lambda-environment-variables). 
+
+## Solution Overview
+This solution can be configured to use the following services: ["Amazon Connect"](https://aws.amazon.com/connect/), ["Amazon Kinesis Video Streams"](https://aws.amazon.com/kinesis/video-streams), ["Amazon Transcribe"](https://aws.amazon.com/transcribe), ["Amazon DynamoDB"](https://aws.amazon.com/dynamodb), ["AWS Lambda"](https://aws.amazon.com/lambda), and ["Amazon S3"](https://aws.amazon.com/s3).  
 
 ## Setup
 ### Building the project
 The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application.
 
-### Configuring the Lambda
-The Lambda requires the following environment variables be set:
+## Lambda Environment Variables
+This Lambda Function has environment variables that conrtol its behavior:
 * `REGION` - The region for AWS DynamoDB, S3 and Kinesis Video Streams resources
 * `TRANSCRIBE_REGION` - The region to be used for AWS Transcribe Streaming
 * `RECORDINGS_BUCKET_NAME` - The AWS S3 bucket name where the audio files will be saved
 * `RECORDINGS_KEY_PREFIX` - The prefix to be used for the audio file names in AWS S3
-* `RECORDINGS_PUBLIC_READ_ACL` - Set to TRUE to add public read ACL on audio file stored in S3. This will allow for anyone with S3 URL to download.
+* `RECORDINGS_PUBLIC_READ_ACL` - Set to TRUE to add public read ACL on audio file stored in S3. This will allow for anyone with S3 URL to download the audio file.
 * `INPUT_KEY_PREFIX` - The prefix for the AWS S3 file name provided in the Lambda request. This file is expected to be present in `RECORDINGS_BUCKET_NAME`
-* `CONSOLE_LOG_TRANSCRIPT_FLAG` -Needs to be set to TRUE if the Connect call transcriptions are to be logged
+* `CONSOLE_LOG_TRANSCRIPT_FLAG` - Needs to be set to TRUE if the Connect call transcriptions are to be logged.
 * `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts need to be saved.
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
 
