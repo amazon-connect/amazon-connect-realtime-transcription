@@ -60,12 +60,74 @@ This Lambda Function has environment variables that conrtol its behavior:
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
 
 ## Sample Lambda Invocation Event
-   `{
-    streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
-    startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
-    connectContactId: event.Details.ContactData.ContactId,
-    transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false
-    }`
+
+```
+
+   {
+    "streamARN": "stream arn",
+    "startFragmentNum": "start fragment number",
+    "connectContactId": "Contact ID",
+    "transcriptionEnabled": "TRUE or FALSE"
+    }
+
+```
+
+## Sample "trigger Lambda" function
+This is a minimal example of a "trigger" lambda function you can create to be invoked from Amazon Connect. This trigger function will take the details from Amazon Connect, and pass them to the KVS/Transcription Lambda Function from this project:
+
+```
+'use strict';
+const AWS = require('aws-sdk'); const lambda = new AWS.Lambda();
+exports.handler = (event, context, callback) => {
+
+    console.log("Received event from Amazon Connect");
+    console.log(JSON.stringify(event));
+    
+    let payload = {
+		        streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
+		        startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
+		        connectContactId: event.Details.ContactData.ContactId,
+		        transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false
+    		};
+    
+    console.log("Trigger event passed to transcriberFunction" + JSON.stringify(payload));
+
+    const params = {
+		// not passing in a ClientContext
+		//Use an environment variable called transcriptionFunction with the value of the transcription-KVS lambda function name
+		'FunctionName': process.env.transcriptionFunction,
+		// InvocationType is RequestResponse by default
+		// LogType is not set so we won't get the last 4K of logs from the invoked function
+		// Qualifier is not set so we use $LATEST
+		'InvokeArgs': JSON.stringify(payload)
+	};
+
+	lambda.invokeAsync(params, function(err, data) {
+
+		if (err)
+			throw (err);
+		else {
+			console.log(JSON.stringify(data));
+			if (callback)
+				callback(null, buildResponse());
+			else
+				console.log('nothing to callback so letting it go');
+		}
+	});
+
+    callback(null, buildResponse());
+};
+function buildResponse() {
+
+    return {
+        // we always return "Success" for now
+        lambdaResult:"Success"
+    };
+}
+
+
+```
+
 
 
 ## License Summary
