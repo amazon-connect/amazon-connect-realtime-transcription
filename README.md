@@ -20,6 +20,16 @@ This solution can be configured to use the following services: [Amazon Connect](
 
 With [Amazon Connect](https://aws.amazon.com/connect/), customer audio can be live streamed to through Kinesis Video Streams as described in this [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html)  This project serves as an example of how to consume a an Amazon Connect live audio stream, capture the audio and send it to S3, as well as perform real-time transcription using [Amazon Transcribe](https://aws.amazon.com/transcribe). 
 
+In the diagram above, once a call is connected to Amazon Connect:
+- (Step 1) In the Amazon Connect Contact Flow, ensure there is a "Start Media Streaming" block
+    - (Step 1a) Once the "Start Media Streaming" block is invoked, a KVS stream will be "assigned" and Amazon Connect will begin to stream the customer audio
+    - Amazon Connect will continue to stream the customer audio for the duration of this call until a "Stop media streaming" block is invoked, or the call is disconnected
+- (Step 2) In the Amazon Connect Contact Flow invoke the [Trigger Lambda Function](#Sample-trigger-Lambda-function) which will automatically be passed the KVS details, as well as the Contact ID
+    - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `TRUE` or `FALSE`
+    - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for this attribute and include it in the invocation event that will be sent on in (Step 3)
+- (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the audio. Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute, while the KVS Consumer/transcriber Lambda function continues to process the audio
+- (Step 4) The KVS Consumenr/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
+
 The Lambda code expects the Kinesis Video Stream details provided by the Amazon Connect Contact Flow as well as the Amazon Connect Contact Id. The handler function of the Lambda is present in `KVSTranscribeStreamingLambda.java` and it uses the GetMedia API of Kinesis Video Stream to fetch the InputStream of the customer audio call. The InputStream is processed using the AWS Kinesis Video Streams provided Parser Library. If the `transcriptionEnabled` property is set to true on the input, a TranscribeStreamingRetryClient client is used to send audio bytes of the audio call to Transcribe. As the transcript segments are being returned, they are saved in a DynamoDB table having ContactId as the Partition key and StartTime of the segment as the Sort key. The audio bytes are also saved in a file along with this and at the end of the audio call, the WAV audio file is uploaded to S3 in the provided `RECORDINGS_BUCKET_NAME` bucket.
 
 ## Getting Started
@@ -27,6 +37,7 @@ Getting started with this project is easy. The most basic use-case of capturing 
 
 ### Easy Setup
 The simplest way to get started is to:
+- Ensure that your Amazon Connect instance has the "live media streaming" feature enabled by following the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html) for "Enable Live Media Streaming"
 - Create a "trigger" lambda function that can be invoked from the Amazon Connect Contact Flow that will pass the following details to this Java lambda function:
     - streamARN (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect)    
     - startFragmentNum (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect) 
