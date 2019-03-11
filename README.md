@@ -26,7 +26,8 @@ Getting started with this project is easy. The most basic use-case of capturing 
 
 ### Easy Setup
 The simplest way to get started is to:
-Step 1) [Download](dist/amzon-connect-realtime-transcription.zip) the pre-packaged Lambda function
+- Step 1) [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) the pre-packaged Lambda function
+- Step 2)
 ### Building the project
 The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application.
 
