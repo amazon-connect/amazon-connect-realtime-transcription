@@ -45,7 +45,7 @@ The simplest way to get started is to:
     - transcriptionEnabled
         - Possible values are either `TRUE` or `FALSE`
         - default behavior if this is not passed is FALSE (no transcription will occur)
-        - This value can be set dyncamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function then keys off of to pass to this Java lambda function
+        - This value can be set dyncamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
 - Create (or use an existing) S3 bucket for the audio files to be uploaded
 - If you would like to use the real-time transcription feature:
     - Create a DynamoDB table, with the "Partition Key" of `ContactId`, and "Sort Key" of `StartTime`
@@ -68,7 +68,7 @@ This Lambda Function has environment variables that conrtol its behavior:
 * `RECORDINGS_PUBLIC_READ_ACL` - Set to TRUE to add public read ACL on audio file stored in S3. This will allow for anyone with S3 URL to download the audio file.
 * `INPUT_KEY_PREFIX` - The prefix for the AWS S3 file name provided in the Lambda request. This file is expected to be present in `RECORDINGS_BUCKET_NAME`
 * `CONSOLE_LOG_TRANSCRIPT_FLAG` - Needs to be set to TRUE if the Connect call transcriptions are to be logged.
-* `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts need to be saved (Table Partition key must be: ContactId, and Sort Key)
+* `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts need to be saved (Table Partition key must be: `ContactId`, and Sort Key must be: `StartTime`)
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
 
 ## Sample Lambda Invocation Event
