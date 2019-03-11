@@ -6,13 +6,19 @@ Making it easy to get started with Amazon Connect live audio streaming and real-
 - [Project Overview](#project-overview)
 - [Architecture Overview](#architecture-overview)
 - [Deployment](#deployment)
-
+- [Lambda Evn Variables](#lambda-environment-variables)
 
 ## Project Overview
 The purpose of this project is to provide a code example and a fully functional Lambda function to get you started with capturing and transcribing Amzon Connect phone calls using Kinesis Video Streams and Amazon Transcribe. This Lambda function can be used to create varying solutions such as capturing audio in the IVR, providing real-time transcription to agents, or even creating a voicemail solution for Amazon Connect. To enable these different use-cases, there are multiple envirnment variables controlling the behavior of the Lambda Function: [“environment variables”](#lambda-environment-variables). 
 
 ## Architecture Overview
 ![](images/arch.png)
+
+## Description
+As described in the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html) customer audio can be captured and sent to a Kinesis Video Stream. The Live media streaming attributes that are populated in contact attributes include the Kinesis Video customer audio stream ARN and the customer audio start fragment number.
+
+The Lambda code here expects these two Kinesis Video Stream attributes along with the Contact Id. The handler function of the Lambda is present in `KVSTranscribeStreamingLambda.java` and it uses the GetMedia API of Kinesis Video Stream to fetch the InputStream of the customer audio call. The InputStream is processed using the AWS Kinesis Video Streams provided Parser Library. If the `transcriptionEnabled` property is set to true on the input, a TranscribeStreamingRetryClient client is used to send audio bytes of the audio call to Transcribe. As the transcript segments are being returned, they are saved in a DynamoDB table having ContactId as the Partition key and StartTime of the segment as the Sort key. The audio bytes are also saved in a file along with this and at the end of the audio call, the WAV audio file is uploaded to S3 in the provided `RECORDINGS_BUCKET_NAME` bucket.
+
 
 This solution can be configured to use the following services: [Amazon Connect](https://aws.amazon.com/connect/), [Amazon Kinesis Video Streams](https://aws.amazon.com/kinesis/video-streams), [Amazon Transcribe](https://aws.amazon.com/transcribe), [Amazon DynamoDB](https://aws.amazon.com/dynamodb), [AWS Lambda](https://aws.amazon.com/lambda), and [Amazon S3](https://aws.amazon.com/s3).
 
