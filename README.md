@@ -40,7 +40,7 @@ The simplest way to get started is to:
 - [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) and deploy the pre-packaged Lambda function
     - Deploy that lambda function to your account, ensure that the role used has access to the services you plan to enable
     - Set the timout on the lambda function to the correct limit to handle the length of calls you plan on processing with this function (up to 15 min)
-    - The handler for the lambda function will should be: `com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest`
+    - The handler for the lambda function is: `com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest`
 - Populate the [environment variables](#lambda-environment-variables) with the correct details for your solution
 
 
