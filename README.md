@@ -7,7 +7,7 @@ Making it easy to get started with Amazon Connect live audio streaming and real-
 - [Architecture Overview](#architecture-overview)
 - [Getting Started](#getting-started)
 - [Lambda Evnvironment Variables](#lambda-environment-variables)
-- [Sample Trigger Lambda](#Sample-"trigger-Lambda"-function)
+- [Sample Trigger Lambda](#Sample-trigger-Lambda-function)
 
 ## Project Overview
 The purpose of this project is to provide a code example and a fully functional Lambda function to get you started with capturing and transcribing Amzon Connect phone calls using Kinesis Video Streams and Amazon Transcribe. This Lambda function can be used to create varying solutions such as capturing audio in the IVR, providing real-time transcription to agents, or even creating a voicemail solution for Amazon Connect. To enable these different use-cases, there are multiple envirnment variables controlling the behavior of the Lambda Function: [“environment variables”](#lambda-environment-variables). 
