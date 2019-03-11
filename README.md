@@ -62,14 +62,12 @@ This Lambda Function has environment variables that conrtol its behavior:
 ## Sample Lambda Invocation Event
 
 ```
-
    {
     "streamARN": "stream arn",
     "startFragmentNum": "start fragment number",
     "connectContactId": "Contact ID",
     "transcriptionEnabled": "TRUE or FALSE"
     }
-
 ```
 
 ## Sample "trigger Lambda" function
