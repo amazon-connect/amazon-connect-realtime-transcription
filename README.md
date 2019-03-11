@@ -26,9 +26,24 @@ Getting started with this project is easy. The most basic use-case of capturing 
 
 ### Easy Setup
 The simplest way to get started is to:
-- [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) the pre-packaged Lambda function
-    - Deploy that lambda function to your account
-    - The handler for the lambda function will be: hshshs.index.ahah.cim
+- Create a "trigger" lambda function that can be invoked from the Amazon Connect Contact Flow that will pass the following details to this Java lambda function:
+    - streamARN (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect)    
+    - startFragmentNum (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect) 
+    - connectContactId (The contact ID for this call)
+    - transcriptionEnabled
+        - Possible values are either `TRUE` or `FALSE`
+        - default behavior if this is not passed is FALSE (no transcription will occur)
+        - This value can be set dyncamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function then keys off of to pass to this Java lambda function
+- Create (or use an existing) S3 bucket for the audio files to be uploaded
+- If you would like to use the real-time transcription feature:
+    - Create a DynamoDB table, with the "Partition Key" of `ContactId`, and "Sort Key" of `StartTime`
+- [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) and deploy the pre-packaged Lambda function
+    - Deploy that lambda function to your account, ensure that the role used has access to the services you plan to enable
+    - Set the timout on the lambda function to the correct limit to handle the length of calls you plan on processing with this function (up to 15 min)
+    - The handler for the lambda function will should be: `com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest`
+- Populate the [environment variables](#lambda-environment-variables) with the correct details for your solution
+
+
 ### Building the project
 The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application.
 
@@ -43,6 +58,14 @@ This Lambda Function has environment variables that conrtol its behavior:
 * `CONSOLE_LOG_TRANSCRIPT_FLAG` - Needs to be set to TRUE if the Connect call transcriptions are to be logged.
 * `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts need to be saved (Table Partition key must be: ContactId, and Sort Key)
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
+
+## Sample Lambda Invocation Event
+   `{
+    streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
+    startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
+    connectContactId: event.Details.ContactData.ContactId,
+    transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false
+    }`
 
 
 ## License Summary
