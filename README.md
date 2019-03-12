@@ -6,7 +6,7 @@ Making it easy to get started with Amazon Connect live audio streaming and real-
 - [Project Overview](#project-overview)
 - [Architecture Overview](#architecture-overview)
 - [Getting Started](#getting-started)
-- [Lambda Evnvironment Variables](#lambda-environment-variables)
+- [Lambda Environment Variables](#lambda-environment-variables)
 - [Sample Trigger Lambda](#Sample-trigger-Lambda-function)
 
 ## Project Overview
