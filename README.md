@@ -61,7 +61,7 @@ The lambda code is designed to be built with Gradle. All requisite dependencies 
 
 ## Lambda Environment Variables
 This Lambda Function has environment variables that control its behavior:
-* `REGION` - The region for AWS DynamoDB, S3 and Kinesis Video Streams resources (ie: us-east-1)
+* `APP_REGION` - The region for AWS DynamoDB, S3 and Kinesis Video Streams resources (ie: us-east-1)
 * `TRANSCRIBE_REGION` - The region to be used for AWS Transcribe Streaming (ie: us-east-1)
 * `RECORDINGS_BUCKET_NAME` - The AWS S3 bucket name where the audio files will be saved (Lambda needs to have permissions to this bucket)
 * `RECORDINGS_KEY_PREFIX` - The prefix to be used for the audio file names in AWS S3
