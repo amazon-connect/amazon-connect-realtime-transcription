@@ -25,7 +25,7 @@ In the diagram above, once a call is connected to Amazon Connect:
     - (Step 1a) Once the "Start Media Streaming" block is executed, a KVS stream will be "assigned" and Amazon Connect will begin to stream the customer audio
     - Amazon Connect will continue to stream the customer audio for the duration of this call until a "Stop media streaming" block is executed, or the call is disconnected
 - (Step 2) In the Amazon Connect Contact Flow invoke the [Trigger Lambda Function](#Sample-trigger-Lambda-function) which will automatically be passed the KVS details and the ContactId
-    - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `TRUE` or `FALSE`
+    - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `true` or `false`
     - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for this attribute and include it in the invocation event that will be sent in (Step 3)
 - (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the Kinesis Video Stream (call audio). Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute while the KVS Consumer/transcriber Lambda function continues to process the audio
 - (Step 4) The KVS Consumer/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
