@@ -48,7 +48,7 @@ The simplest way to get started is to:
         - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
 - Create (or use an existing) S3 bucket for the audio files to be uploaded
 - If you would like to use the real-time transcription feature:
-    - Create a DynamoDB table, with the "Partition Key" of `ContactId`, and "Sort Key" of `StartTime`
+    - Create a DynamoDB table, with the "Partition Key" named as `ContactId` having String data type , and "Sort Key" named `StartTime` having Number data type
 - [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) and deploy the pre-packaged Lambda function
     - Ensure that the lambda execution role assigned has access to the services you plan to enable
     - Set the timeout on the lambda function to the correct limit to handle the length of calls you plan on processing with this function (up to 15 min)
