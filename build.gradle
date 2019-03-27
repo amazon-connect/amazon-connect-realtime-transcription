@@ -8,7 +8,7 @@ dependencies {
     compile fileTree(dir: 'jars', include: '*.jar')
     compile group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.2'
     compile(
-            'software.amazon.awssdk:transcribestreaming:2.2.0',
+            'software.amazon.awssdk:transcribestreaming:2.5.0',
 
             'com.amazonaws:aws-java-sdk-dynamodb:1.11.475',
             'com.amazonaws:aws-java-sdk-kinesisvideo:1.11.475',
