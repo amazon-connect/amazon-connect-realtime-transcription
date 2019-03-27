@@ -16,12 +16,17 @@ package com.amazonaws.kvstranscribestreaming;
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
+import java.util.Optional;
+import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
+
 public class TranscriptionRequest {
 
     String streamARN = null;
     String inputFileName = null;
     String startFragmentNum = null;
     String connectContactId = null;
+    Optional<String> languageCode = Optional.empty();
     boolean transcriptionEnabled = false;
 
     public String getStreamARN() {
@@ -64,6 +69,19 @@ public class TranscriptionRequest {
         this.connectContactId = connectContactId;
     }
 
+    public Optional<String> getLanguageCode() {
+
+        return this.languageCode;
+    }
+
+    public void setLanguageCode(String languageCode) {
+
+        if ((languageCode != null) && (languageCode.length() > 0)) {
+
+            this.languageCode = Optional.of(languageCode);
+        }
+    }
+
     public void setTranscriptionEnabled(boolean enabled) {
         transcriptionEnabled = enabled;
     }
@@ -74,8 +92,8 @@ public class TranscriptionRequest {
 
     public String toString() {
 
-        return String.format("streamARN=%s, startFragmentNum=%s, connectContactId=%s, transcriptionEnabled=%s",
-                getStreamARN(), getStartFragmentNum(), getConnectContactId(), isTranscriptionEnabled());
+        return String.format("streamARN=%s, startFragmentNum=%s, connectContactId=%s, languageCode=%s, transcriptionEnabled=%s",
+                getStreamARN(), getStartFragmentNum(), getConnectContactId(), getLanguageCode(), isTranscriptionEnabled());
     }
 
     public void validate() throws IllegalArgumentException {
@@ -86,6 +104,14 @@ public class TranscriptionRequest {
         // complain if none are provided
         if ((getStreamARN() == null) && (getInputFileName() == null))
             throw new IllegalArgumentException("One of streamARN or inputFileName must be provided");
+
+        // language code is optional; if provided, it should be one of the values accepted by
+        // https://docs.aws.amazon.com/transcribe/latest/dg/API_streaming_StartStreamTranscription.html#API_streaming_StartStreamTranscription_RequestParameters
+        if (languageCode.isPresent()) {
+            if (!LanguageCode.knownValues().contains(LanguageCode.fromValue(languageCode.get()))) {
+                throw new IllegalArgumentException("Incorrect language code");
+            }
+        }
     }
 
 }
