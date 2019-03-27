@@ -37,6 +37,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Optional;
 import java.util.Date;
 import java.util.Optional;
 import java.util.TimeZone;
@@ -109,11 +110,11 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
 
             // If an inputFileName has been provided in the request, stream audio from the file to Transcribe
             if (request.getInputFileName() != null) {
-                startFileToTranscribeStreaming(request.getInputFileName());
+                startFileToTranscribeStreaming(request.getInputFileName(), request.getLanguageCode());
             }
             // Else start streaming between KVS and Transcribe
             else {
-                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(), request.isTranscriptionEnabled());
+                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(), request.isTranscriptionEnabled(), request.getLanguageCode());
             }
 
             return "{ \"result\": \"Success\" }";
@@ -132,9 +133,10 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * @param streamARN
      * @param startFragmentNum
      * @param contactId
+     * @param languageCode
      * @throws Exception
      */
-    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled) throws Exception {
+    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled, Optional<String> languageCode) throws Exception {
 
         Path saveAudioFilePath = Paths.get("/tmp", contactId + "_" + DATE_FORMAT.format(new Date()) + ".raw");
         FileOutputStream fileOutputStream = new FileOutputStream(saveAudioFilePath.toString());
@@ -154,7 +156,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
 
                 CompletableFuture<Void> result = client.startStreamTranscription(
                         // since we're definitely working with telephony audio, we know that's 8 kHz
-                        getRequest(8000),
+                        getRequest(8000, languageCode),
                         new KVSAudioStreamPublisher(streamingMkvReader, contactId, fileOutputStream, tagProcessor, fragmentVisitor),
                         new StreamTranscriptionBehaviorImpl(segmentWriter)
                 );
@@ -197,9 +199,10 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * The transcript segments are continuously saved to the Dynamo DB table
      *
      * @param inputFileName
+     * @param languageCode the language code to be used for Transcription (optional; see https://docs.aws.amazon.com/transcribe/latest/dg/API_streaming_StartStreamTranscription.html#API_streaming_StartStreamTranscription_RequestParameters )
      * @throws Exception
      */
-    private void startFileToTranscribeStreaming(String inputFileName) throws Exception {
+    private void startFileToTranscribeStreaming(String inputFileName, Optional<String> languageCode) throws Exception {
 
         // get the audio from S3
         String audioFilePath = "/tmp/" + inputFileName;
@@ -215,7 +218,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
 
             CompletableFuture<Void> result = client.startStreamTranscription(
                     // since we're definitely working with telephony audio, we know that's 8 kHz
-                    getRequest(8000),
+                    getRequest(8000, languageCode),
                     new FileAudioStreamPublisher(inputStream),
                     new StreamTranscriptionBehaviorImpl(segmentWriter)
             );
@@ -278,11 +281,13 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * request, such as audio sample rate and language spoken in audio
      *
      * @param mediaSampleRateHertz sample rate of the audio to be streamed to the service in Hertz
+     * @param languageCode the language code to be used for Transcription (optional; see https://docs.aws.amazon.com/transcribe/latest/dg/API_streaming_StartStreamTranscription.html#API_streaming_StartStreamTranscription_RequestParameters )
      * @return StartStreamTranscriptionRequest to be used to open a stream to transcription service
      */
-    private static StartStreamTranscriptionRequest getRequest(Integer mediaSampleRateHertz) {
+    private static StartStreamTranscriptionRequest getRequest(Integer mediaSampleRateHertz, Optional <String> languageCode) {
+
         return StartStreamTranscriptionRequest.builder()
-                .languageCode(LanguageCode.EN_US.toString())
+                .languageCode(languageCode.isPresent() ? languageCode.get() : LanguageCode.EN_US.toString())
                 .mediaEncoding(MediaEncoding.PCM)
                 .mediaSampleRateHertz(mediaSampleRateHertz)
                 .build();
