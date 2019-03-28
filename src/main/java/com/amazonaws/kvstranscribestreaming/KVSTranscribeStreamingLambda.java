@@ -114,7 +114,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
             }
             // Else start streaming between KVS and Transcribe
             else {
-                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(), request.isTranscriptionEnabled(), request.getLanguageCode());
+                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(), request.isTranscriptionEnabled(), request.getLanguageCode(), request.getSaveCallRecording());
             }
 
             return "{ \"result\": \"Success\" }";
@@ -136,7 +136,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * @param languageCode
      * @throws Exception
      */
-    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled, Optional<String> languageCode) throws Exception {
+    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled, Optional<String> languageCode, Optional<Boolean> saveCallRecording) throws Exception {
 
         Path saveAudioFilePath = Paths.get("/tmp", contactId + "_" + DATE_FORMAT.format(new Date()) + ".raw");
         FileOutputStream fileOutputStream = new FileOutputStream(saveAudioFilePath.toString());
@@ -173,7 +173,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
                 throw e;
 
             } finally {
-                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId);
+                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId, saveCallRecording);
             }
         } else {
             try {
@@ -189,7 +189,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
                 }
 
             } finally {
-                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId);
+                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId, saveCallRecording);
             }
         }
     }
@@ -243,20 +243,21 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * @param kvsInputStream
      * @param fileOutputStream
      * @param saveAudioFilePath
+     * @param saveCallRecording should the call recording be uploaded to S3?
      * @throws IOException
      */
     private void closeFileAndUploadRawAudio(InputStream kvsInputStream, FileOutputStream fileOutputStream,
-                                            Path saveAudioFilePath, String contactId) throws IOException {
+                                            Path saveAudioFilePath, String contactId, Optional<Boolean> saveCallRecording) throws IOException {
 
         kvsInputStream.close();
         fileOutputStream.close();
 
         //Upload the Raw Audio file to S3
-        if (new File(saveAudioFilePath.toString()).length() > 0) {
+        if ((saveCallRecording.isPresent() ? saveCallRecording.get() : false) && (new File(saveAudioFilePath.toString()).length() > 0)) {
             AudioUtils.uploadRawAudio(REGION, RECORDINGS_BUCKET_NAME, RECORDINGS_KEY_PREFIX, saveAudioFilePath.toString(), contactId, RECORDINGS_PUBLIC_READ_ACL,
                     getAWSCredentials());
         } else {
-            logger.info("Skipping upload to S3. Audio file has 0 bytes: " + saveAudioFilePath);
+            logger.info("Skipping upload to S3.  saveCallRecording was disabled or audio file has 0 bytes: " + saveAudioFilePath);
         }
     }
 

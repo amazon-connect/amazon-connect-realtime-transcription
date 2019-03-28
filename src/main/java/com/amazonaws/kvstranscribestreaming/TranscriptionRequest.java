@@ -28,6 +28,7 @@ public class TranscriptionRequest {
     String connectContactId = null;
     Optional<String> languageCode = Optional.empty();
     boolean transcriptionEnabled = false;
+    Optional<Boolean> saveCallRecording = Optional.empty();
 
     public String getStreamARN() {
 
@@ -90,10 +91,24 @@ public class TranscriptionRequest {
         return  transcriptionEnabled;
     }
 
+    public void setSaveCallRecording(boolean shouldSaveCallRecording) {
+
+        saveCallRecording = Optional.of(shouldSaveCallRecording);
+    }
+
+    public Optional<Boolean> getSaveCallRecording() {
+        return saveCallRecording;
+    }
+
+    public boolean isSaveCallRecordingEnabled() {
+
+        return (saveCallRecording.isPresent() ? saveCallRecording.get() : false);
+    }
+
     public String toString() {
 
-        return String.format("streamARN=%s, startFragmentNum=%s, connectContactId=%s, languageCode=%s, transcriptionEnabled=%s",
-                getStreamARN(), getStartFragmentNum(), getConnectContactId(), getLanguageCode(), isTranscriptionEnabled());
+        return String.format("streamARN=%s, startFragmentNum=%s, connectContactId=%s, languageCode=%s, transcriptionEnabled=%s, saveCallRecording=%s",
+                getStreamARN(), getStartFragmentNum(), getConnectContactId(), getLanguageCode(), isTranscriptionEnabled(), isSaveCallRecordingEnabled());
     }
 
     public void validate() throws IllegalArgumentException {
