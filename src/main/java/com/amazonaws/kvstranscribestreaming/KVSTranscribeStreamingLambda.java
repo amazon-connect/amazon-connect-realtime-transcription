@@ -257,7 +257,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
             AudioUtils.uploadRawAudio(REGION, RECORDINGS_BUCKET_NAME, RECORDINGS_KEY_PREFIX, saveAudioFilePath.toString(), contactId, RECORDINGS_PUBLIC_READ_ACL,
                     getAWSCredentials());
         } else {
-            logger.info("Skipping upload to S3. Audio file has 0 bytes: " + saveAudioFilePath);
+            logger.info("Skipping upload to S3.  saveCallRecording was disabled or audio file has 0 bytes: " + saveAudioFilePath);
         }
     }
 
