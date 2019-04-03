@@ -30,7 +30,7 @@ In the diagram above, once a call is connected to Amazon Connect:
 - (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the Kinesis Video Stream (call audio). Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute while the KVS Consumer/transcriber Lambda function continues to process the audio
 - (Step 4) The KVS Consumer/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
 
-The Lambda code expects the Kinesis Video Stream details provided by the Amazon Connect Contact Flow as well as the Amazon Connect Contact Id. The handler function of the Lambda is present in `KVSTranscribeStreamingLambda.java` and it uses the GetMedia API of Kinesis Video Stream to fetch the InputStream of the customer audio call. The InputStream is processed using the AWS Kinesis Video Streams provided Parser Library. If the `transcriptionEnabled` property is set to true on the input, a TranscribeStreamingRetryClient client is used to send audio bytes of the audio call to Transcribe. As the transcript segments are being returned, they are saved in a DynamoDB table having ContactId as the Partition key and StartTime of the segment as the Sort key. The audio bytes are also saved in a file along with this and at the end of the audio call, the WAV audio file is uploaded to S3 in the provided `RECORDINGS_BUCKET_NAME` bucket.
+The Lambda code expects the Kinesis Video Stream details provided by the Amazon Connect Contact Flow as well as the Amazon Connect Contact Id. The handler function of the Lambda is present in `KVSTranscribeStreamingLambda.java` and it uses the GetMedia API of Kinesis Video Stream to fetch the InputStream of the customer audio call. The InputStream is processed using the AWS Kinesis Video Streams provided Parser Library. If the `transcriptionEnabled` property is set to true on the input, a TranscribeStreamingRetryClient client is used to send audio bytes of the audio call to Transcribe. As the transcript segments are being returned, they are saved in a DynamoDB table having ContactId as the Partition key and StartTime of the segment as the Sort key. The audio bytes are also saved in a file along with this and at the end of the audio call, if the `saveCallRecording` property is set to true on the input, the WAV audio file is uploaded to S3 in the provided `RECORDINGS_BUCKET_NAME` bucket.
 
 ## Getting Started
 Getting started with this project is easy. The most basic use case of capturing audio in the Amazon Connect IVR can be accomplished by downloading the pre-packaged Lambda Function, deploying it in your account, giving it the correct permissions to access S3 and KVS, and then invoking it and passing the details in the invocation event.
@@ -78,7 +78,8 @@ This Lambda Function has environment variables that control its behavior:
     "streamARN": "stream arn",
     "startFragmentNum": "start fragment number",
     "connectContactId": "Contact ID",
-    "transcriptionEnabled": "TRUE or FALSE"
+    "transcriptionEnabled": "true or false",
+    "saveCallRecording": "true or false"
     }
 ```
 
@@ -93,11 +94,15 @@ exports.handler = (event, context, callback) => {
     console.log("Received event from Amazon Connect");
     console.log(JSON.stringify(event));
     
+    //assuming you have set an attribute in the Amazon Connect contact flow for "transcribeCall" and "saveCallRecording"
+    //we will use those attributes to drive the transcription Lambda behavior
+
     let payload = {
 		        streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
 		        startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
 		        connectContactId: event.Details.ContactData.ContactId,
-		        transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false
+		        transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
+                saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "true" ? true : false
     		};
     
     console.log("Trigger event passed to transcriberFunction" + JSON.stringify(payload));
