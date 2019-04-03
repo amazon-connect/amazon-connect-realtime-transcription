@@ -26,6 +26,7 @@ In the diagram above, once a call is connected to Amazon Connect:
     - Amazon Connect will continue to stream the customer audio for the duration of this call until a "Stop media streaming" block is executed, or the call is disconnected
 - (Step 2) In the Amazon Connect Contact Flow invoke the [Trigger Lambda Function](#Sample-trigger-Lambda-function) which will automatically be passed the KVS details and the ContactId
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `true` or `false`
+    - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `saveCallRecording` and a value of either `true` or `false`
     - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for this attribute and include it in the invocation event that will be sent in (Step 3)
 - (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the Kinesis Video Stream (call audio). Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute while the KVS Consumer/transcriber Lambda function continues to process the audio
 - (Step 4) The KVS Consumer/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
@@ -43,8 +44,12 @@ The simplest way to get started is to:
     - startFragmentNum (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect) 
     - connectContactId (The contact ID for this call)
     - transcriptionEnabled
-        - Possible values are either `TRUE` or `FALSE`
-        - default behavior if this is not passed is FALSE (no transcription will occur)
+        - Possible values are either `true` or `false`
+        - default behavior if this is not passed is false (no transcription will occur)
+        - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
+    - saveCallRecording
+        - Possible values are either `true` or `false`
+        - default behavior if this is not passed is false (audio file will not be uploaded to S3)
         - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
 - Create (or use an existing) S3 bucket for the audio files to be uploaded
 - If you would like to use the real-time transcription feature:
