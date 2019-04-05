@@ -29,7 +29,7 @@ In the diagram above, once a call is connected to Amazon Connect:
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `true` or `false`
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `saveCallRecording` and a value of either `true` or `false`
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `languageCode` and a value of either `en-US` or `es-US`
-    - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for this attribute and include it in the invocation event that will be sent in (Step 3)
+    - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for these attributes and include them in the invocation event that will be sent in (Step 3)
 - (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the Kinesis Video Stream (call audio). Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute while the KVS Consumer/transcriber Lambda function continues to process the audio
 - (Step 4) The KVS Consumer/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
 
