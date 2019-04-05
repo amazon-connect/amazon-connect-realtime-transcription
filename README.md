@@ -127,7 +127,7 @@ exports.handler = (event, context, callback) => {
     StreamARN, StartFragmentNumber, and ContactId are included by default from the Amazon Connect invocation event.
     This payload also assumes you have set contact attributes in the Amazon Connect contact flow with keys of:
     "transcribeCall", "saveCallRecording", and "languageCode" to dynamically control the transcription function behavior.
-    If these attributes are not set in your contact flow then transcriptonEnabbled will default to "false", saveCallRecording
+    If these attributes are not set in your contact flow then transcriptionEnabled will default to "false", saveCallRecording
     will default to "true", and languageCode will default to "en-US".
     */
 
