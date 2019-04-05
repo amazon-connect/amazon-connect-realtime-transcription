@@ -122,27 +122,21 @@ exports.handler = (event, context, callback) => {
     console.log("Received event from Amazon Connect");
     console.log(JSON.stringify(event));
 
-    //assuming you have set an attribute in the Amazon Connect contact flow for "transcribeCall" and "saveCallRecording"
-    //we will use those attributes to drive the transcription Lambda behavior
+    /*
+    The following payload is what will be passed to the transcription lambda function. 
+    StreamARN, StartFragmentNumber, and ContactId are included by default from the Amazon Connect invocation event.
+    This payload also assumes you have set contact attributes in the Amazon Connect contact flow with keys of:
+    "transcribeCall", "saveCallRecording", and "languageCode" to dynamically control the transcription function behavior.
+    If these attributes are not set in your contact flow then transcriptonEnabbled will default to "false", saveCallRecording
+    will default to "true", and languageCode will default to "en-US".
+    */
 
     let payload = {
-        //StreamARN will be included in the Amazon Connect invocation payload if streaming was started successfully 
         streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
-
-        //StartFragmentNumber will be included in the Amazon Connect invocation payload if streaming was started successfully 
         startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
-
-        //ContactId is always included in the Amazon Connect invocation payload
         connectContactId: event.Details.ContactData.ContactId,
-
-        //The following assumes you have set associated attributes in the Amazon Connect Contact Flow to control these options
-        //transcribeCall either "true" or "false", if not set the default is "false"
         transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
-
-        //saveCallRecording either "true" or "false", if not set the default is "true"
         saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "false" ? false : true,
-
-        //languageCode either "en-US" or "es-US" for US-English, or US-Spanish, if not set the default is "en-US"
         languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US"
     };
 
