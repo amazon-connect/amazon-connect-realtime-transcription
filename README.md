@@ -111,68 +111,70 @@ This is a minimal example of a "trigger" lambda function you can create to be in
 
 ```
 'use strict';
-const AWS = require('aws-sdk'); const lambda = new AWS.Lambda();
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda();
 exports.handler = (event, context, callback) => {
 
     console.log("Received event from Amazon Connect");
     console.log(JSON.stringify(event));
-    
+
     //assuming you have set an attribute in the Amazon Connect contact flow for "transcribeCall" and "saveCallRecording"
     //we will use those attributes to drive the transcription Lambda behavior
 
     let payload = {
-		    //StreamARN will be included in the Amazon Connect invocation payload if streaming was started successfully 
-		    streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
-		    
-		    //StartFragmentNumber will be included in the Amazon Connect invocation payload if streaming was started successfully 
-		    startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
-		    
-		    //ContactId is always included in the Amazon Connect invocation payload
-		    connectContactId: event.Details.ContactData.ContactId,
-		    
-		    //The following assumes you have set associated attributes in the Amazon Connect Contact Flow to control these options
-		    //transcribeCall either "true" or "false", if not set the default is "false"
-		    transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
-		    
-		    //saveCallRecording either "true" or "false", if not set the default is "true"
-            saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "false" ? false : true,
-            
-            //languageCode either "en-US" or "es-US" for US-English, or US-Spanish, if not set the default is "en-US"
-            languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US"
-    		};
-    
+        //StreamARN will be included in the Amazon Connect invocation payload if streaming was started successfully 
+        streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
+
+        //StartFragmentNumber will be included in the Amazon Connect invocation payload if streaming was started successfully 
+        startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
+
+        //ContactId is always included in the Amazon Connect invocation payload
+        connectContactId: event.Details.ContactData.ContactId,
+
+        //The following assumes you have set associated attributes in the Amazon Connect Contact Flow to control these options
+        //transcribeCall either "true" or "false", if not set the default is "false"
+        transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
+
+        //saveCallRecording either "true" or "false", if not set the default is "true"
+        saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "false" ? false : true,
+
+        //languageCode either "en-US" or "es-US" for US-English, or US-Spanish, if not set the default is "en-US"
+        languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US"
+    };
+
     console.log("Trigger event passed to transcriberFunction" + JSON.stringify(payload));
 
     const params = {
-		// not passing in a ClientContext
-		//Use an environment variable called transcriptionFunction with the value of the transcription-KVS lambda function name
-		'FunctionName': process.env.transcriptionFunction,
-		// InvocationType is RequestResponse by default
-		// LogType is not set so we won't get the last 4K of logs from the invoked function
-		// Qualifier is not set so we use $LATEST
-		'InvokeArgs': JSON.stringify(payload)
-	};
+        // not passing in a ClientContext
+        //Use an environment variable called transcriptionFunction with the value of the transcription-KVS lambda function name
+        'FunctionName': process.env.transcriptionFunction,
+        // InvocationType is RequestResponse by default
+        // LogType is not set so we won't get the last 4K of logs from the invoked function
+        // Qualifier is not set so we use $LATEST
+        'InvokeArgs': JSON.stringify(payload)
+    };
 
-	lambda.invokeAsync(params, function(err, data) {
+    lambda.invokeAsync(params, function (err, data) {
 
-		if (err)
-			throw (err);
-		else {
-			console.log(JSON.stringify(data));
-			if (callback)
-				callback(null, buildResponse());
-			else
-				console.log('nothing to callback so letting it go');
-		}
-	});
+        if (err)
+            throw (err);
+        else {
+            console.log(JSON.stringify(data));
+            if (callback)
+                callback(null, buildResponse());
+            else
+                console.log('nothing to callback so letting it go');
+        }
+    });
 
     callback(null, buildResponse());
 };
+
 function buildResponse() {
 
     return {
         // we always return "Success" for now
-        lambdaResult:"Success"
+        lambdaResult: "Success"
     };
 }
 
