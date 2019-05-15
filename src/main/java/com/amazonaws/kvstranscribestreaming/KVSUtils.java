@@ -34,6 +34,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
+import static com.amazonaws.util.StringUtils.isNullOrEmpty;
+
 /**
  * Utility class to interact with KVS streams
  *
@@ -180,7 +182,8 @@ public final class KVSUtils {
     public static InputStream getInputStreamFromKVS(String streamName,
                                                     Regions region,
                                                     String startFragmentNum,
-                                                    AWSCredentialsProvider awsCredentialsProvider) {
+                                                    AWSCredentialsProvider awsCredentialsProvider,
+                                                    String startSelectorType) {
         Validate.notNull(streamName);
         Validate.notNull(region);
         Validate.notNull(startFragmentNum);
@@ -197,9 +200,22 @@ public final class KVSUtils {
                 .withCredentials(awsCredentialsProvider);
         AmazonKinesisVideoMedia amazonKinesisVideoMedia = amazonKinesisVideoMediaClientBuilder.build();
 
-        StartSelector startSelector = new StartSelector()
-                .withStartSelectorType(StartSelectorType.FRAGMENT_NUMBER)
-                .withAfterFragmentNumber(startFragmentNum);
+        StartSelector startSelector;
+        startSelectorType = isNullOrEmpty(startSelectorType) ? "NOW" : startSelectorType;
+        switch (startSelectorType) {
+            case "FRAGMENT_NUMBER":
+                startSelector = new StartSelector()
+                        .withStartSelectorType(StartSelectorType.FRAGMENT_NUMBER)
+                        .withAfterFragmentNumber(startFragmentNum);
+                logger.info("StartSelector set to FRAGMENT_NUMBER");
+                break;
+            case "NOW":
+            default:
+                startSelector = new StartSelector()
+                        .withStartSelectorType(StartSelectorType.NOW);
+                logger.info("StartSelector set to NOW");
+                break;
+        }
 
         GetMediaResult getMediaResult = amazonKinesisVideoMedia.getMedia(new GetMediaRequest()
                 .withStreamName(streamName)
