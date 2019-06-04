@@ -180,9 +180,10 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
                     finalFuture.completeExceptionally(e);
                 }
             } else {
-                metricsUtil.recordMetric("TranscribeStreamError", 0);
-                responseHandler.onComplete();
+                logger.info("Completable future is complete.");
                 finalFuture.complete(null);
+                responseHandler.onComplete();
+                metricsUtil.recordMetric("TranscribeStreamError", 0);
             }
         });
     }
@@ -208,9 +209,11 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
                 })
                 .onError(e -> {
                     //Do nothing here. Don't close any streams that shouldn't be cleaned up yet.
+                    logger.info("Reached on error but doing nothing" + e);
                 })
                 .onComplete(() -> {
                     //Do nothing here. Don't close any streams that shouldn't be cleaned up yet.
+                    logger.info("Reached on complete.");
                 })
                 .subscriber(event -> {
                     try {

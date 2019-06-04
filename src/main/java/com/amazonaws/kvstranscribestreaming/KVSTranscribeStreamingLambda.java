@@ -39,8 +39,6 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Optional;
 import java.util.Date;
-import java.util.Optional;
-import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
