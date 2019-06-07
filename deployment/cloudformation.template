@@ -1,0 +1,642 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  "AI Powered Speach Analytics for Amazon Connect:
+  - Create the basic foundation for streaming customer audio from Amazon Connect by deploying:
+  - S3 Bucket for audio files, and the sample contact flow
+  - Dynamo DB tables: transcriptSegments and contactDetails
+  - A Lambda triggered on inbound contacts to store the initial contact details
+  - A Lambda to trigger and pass the stream details to the Java Lambda
+  - A Java Lambda to consume KVS and stream it to Amazon Transcribe, store the segments in DDB and upload the raw audio to S3
+  - A Node.js Lambda triggered by S3 once WAV file is uploaded to store the concatenated transcript segments in the contact details table along with the S3 location of the audio file
+  - A Node.js Lambda triggered by CloudFormation to create a sample Amazon Connect contact flow, pre-populated with the Lambda ARNs and placed in the S3 bucket for you to import in to your Amazon Connect instance.
+  - (SO0054-preview)"
+Mappings:
+  FunctionMap:
+    Configuration:
+      SolutionID: "SO0054"
+  Send:
+    AnonymousUsage:
+      Data: "Yes"
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Existing configuration
+          Parameters:
+            - existingS3BucketName
+            - existingS3Path
+      - Label:
+          default: Amazon S3 Configuration
+        Parameters:
+          - s3BucketName
+          - audioFilePrefix
+          - rawAudioUploadPrefix
+      - Label:
+          default: Amazon DynamoDB Configuration
+        Parameters:
+          - transcriptSegmentsTable
+          - contactDetailsTable
+    ParameterLabels:
+      s3BucketName:
+        default: Call Audio Bucket Name
+      audioFilePrefix:
+        default: Audio File Prefix
+      rawAudioUploadPrefix:
+        default: Test Mono Audio Prefix
+      transcriptSegmentsTable:
+        default: Transcript Table Name
+      contactDetailsTable:
+        default: Contacts Table Name
+      existingS3Path:
+        default: Existing S3 Bucket Name
+      existingS3BucketName:
+        default: Existing Path in the existing S3 Bucket
+Parameters:
+  s3BucketName:
+    Type: String
+    Default: "new-audio-bucket-name"
+    Description: >
+      Enter the (globally unique) name you would like to use for the Amazon S3 bucket where we will store the audio files, and the sample contact flow.
+      This template will fail to deploy if the bucket name you chose is currently in use.
+    AllowedPattern: '(?=^.{3,63}$)(?!^(\d+\.)+\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$)'
+  audioFilePrefix:
+    Type: String
+    Default:  recordings/
+    Description:  The Amazon S3 prefix where the audio files will be saved (must end in "/")
+  rawAudioUploadPrefix:
+    Type: String
+    Default:  audio-file-input/
+    Description:  >
+      The Amazon S3 prefix where raw/wav (audio/L16; mono; 8 kHz) audio recordings may be uploaded in the event you would like
+      process an audio file vs making a phone call and streaming from KVS. Mainly for testing, or for realtime transcription of audio files. This will only work with single channel files (mono).
+  transcriptSegmentsTable:
+    Type: String
+    Default:  contactTranscriptSegments
+    Description:  The name of the DynamoDB Table where segments (utterances) for the caller transcript will be saved (Ensure you do not have a table with this name already).
+  contactDetailsTable:
+    Type: String
+    Default:  contactDetails
+    Description:  The name of the DynamoDB Table where contact details will be written (Ensure you do not have a table with this name already).
+  existingS3BucketName:
+    Type: String
+    Default: existingS3Bucket
+    Description: The name of the S3 bucket that contains the zipped lambda files
+  existingS3Path:
+    Type: String
+    Default: existingS3Path/
+    Description: The path to the zipped lambda files in the existingS3BucketName
+Outputs:
+  transcriptSegmentsDDBTable:
+    Description:  The ARN of the DynamoDB table created to store segments of call transcripts (customer audio)
+    Value: !GetAtt transcriptSegmentsDDBTable.Arn
+  contactsDDBTable:
+    Description:  The ARN of the DynamoDB table created to store contact details used in this solution
+    Value: !GetAtt contactDetailsDDBTable.Arn
+  initContactDetails:
+    Description:  >
+      AWS Lambda Function that will be triggered when the call starts so that we have the initial contact details which can later add to when we have the transcript, and audio file location.
+    Value: !Ref initContactDetails
+  transcriptionTrigger:
+    Description:  >
+      AWS Lambda Function to start (asynchronous) streaming transcription; it is expected to be called by the
+      Amazon Connect Contact Flow.
+    Value: !Ref kvsConsumerTrigger
+  transcriptionTriggerARN:
+    Description:  ARN for the TranscriptionTriggerFunction
+    Value: !GetAtt kvsConsumerTrigger.Arn
+  CallTranscription:
+    Description:  AWS Lambda Function to get audio from Kinesis Video Streams and use Amazon Transcribe to get text for the caller audio.  Should be invoked by TranscriptionTrigger and write results to the transcriptSegments table.
+    Value: !Ref kvsTranscriber
+  createS3BucketOP:
+    Description: Bucket contains all the call recordings and sample contactflow
+    Value: !GetAtt [createS3Bucket, WebsiteURL]
+  createS3BucketSSLOP:
+    Description:  Bucket contains all the call recordings and sample contactflow
+    Value: !Join ['', ['https://', !GetAtt [createS3Bucket, DomainName]]]
+
+Resources:
+  allowConnectToKvsConsumerTriggerLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref kvsConsumerTrigger
+      Action: 'lambda:InvokeFunction'
+      Principal: connect.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+
+  allowConnectToInitContactDetailsLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref initContactDetails
+      Action: 'lambda:InvokeFunction'
+      Principal: connect.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+
+  allowS3toProcessContactSummaryLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref processContactSummary
+      Action: 'lambda:InvokeFunction'
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+
+  createS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref s3BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          -
+            Function: !GetAtt processContactSummary.Arn
+            Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  -
+                    Name: suffix
+                    Value: wav
+      AccessControl: LogDeliveryWrite
+      LoggingConfiguration:
+        DestinationBucketName: !Ref s3BucketName
+        LogFilePrefix: 'logs/'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          -   AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - PUT
+                - HEAD
+              MaxAge: '3000'
+
+  transcriptSegmentsDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:  !Ref transcriptSegmentsTable
+      AttributeDefinitions:
+        -
+          AttributeName: "ContactId"
+          AttributeType: "S"
+        -
+          AttributeName: "StartTime"
+          AttributeType: "N"
+      KeySchema:
+        -
+          AttributeName: "ContactId"
+          KeyType: "HASH"
+        -
+          AttributeName: "StartTime"
+          KeyType: "RANGE"
+      # assuming 5 concurrent calls
+      ProvisionedThroughput:
+        ReadCapacityUnits:
+          5
+        WriteCapacityUnits:
+          5
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: True
+      TimeToLiveSpecification:
+        AttributeName:  "ExpiresAfter"
+        Enabled:  True
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  contactDetailsDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:  !Ref contactDetailsTable
+      AttributeDefinitions:
+        -
+          AttributeName: "contactId"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "contactId"
+          KeyType: "HASH"
+      # assuming 5 concurrent calls
+      ProvisionedThroughput:
+        ReadCapacityUnits:
+          5
+        WriteCapacityUnits:
+          5
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: True
+
+  AIPoweredSpeechAnalyticsKvsTranscribeRole:
+    Type: "AWS::IAM::Role"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F3
+            reason: transcribe:* do not support resource-level permissions and kinesisvideo streams are dynamically created and therefore cannot be specificed directly
+          - id: W11
+            reason: transcribe:* do not support resource-level permissions and kinesisvideo streams are dynamically created and therefore cannot be specificed directly
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: kvs-streaming-transcribe-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:GetRecords"
+                  - "dynamodb:GetShardIterator"
+                  - "dynamodb:DescribeStream"
+                  - "dynamodb:ListStreams"
+                Resource:
+                  - !Sub ${transcriptSegmentsDDBTable.Arn}
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:PutObjectAcl"
+                Resource:
+                  - !Sub ${createS3Bucket.Arn}/*
+              -
+                Effect: "Allow"
+                Action:
+                  - "transcribe:DeleteTranscriptionJob"
+                  - "transcribe:GetTranscriptionJob"
+                  - "transcribe:GetVocabulary"
+                  - "transcribe:ListTranscriptionJobs"
+                  - "transcribe:ListVocabularies"
+                  - "transcribe:StartStreamTranscription"
+                  - "transcribe:StartTranscriptionJob"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "kinesisvideo:Describe*"
+                  - "kinesisvideo:Get*"
+                  - "kinesisvideo:List*"
+                Resource: "*"
+
+  AIPoweredSpeechAnalyticsKvsTriggerRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: kvs-streaming-trigger-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                  - "lambda:InvokeAsync"
+                Resource:
+                  - !GetAtt kvsTranscriber.Arn
+
+  AIPoweredSpeechAnalyticsProcessContactRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: process-contact-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:Query"
+                Resource:
+                  - !Sub ${transcriptSegmentsDDBTable.Arn}
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:Update"
+                Resource:
+                  - !Sub ${contactDetailsDDBTable.Arn}
+
+  AIPoweredSpeechAnalyticsContactFlowCreatorRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: contact-flow-creator-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                Resource:
+                  - !Sub ${createS3Bucket.Arn}/*
+
+  AIPoweredSpeechAnalyticsConnectUserStsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              AWS:
+                !Join
+                - ''
+                - - 'arn:'
+                  - !Ref 'AWS::Partition'
+                  - ':iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':'
+                  - 'root'
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+
+  AIPoweredSpeechAnalyticsConnectUserStsPolicy:
+    Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: comprehend, translate, and connect do not support resource-level permissions
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-UserStsPolicy
+      Roles:
+        - !Ref AIPoweredSpeechAnalyticsConnectUserStsRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action:
+              - "comprehend:ListEntityRecognizers"
+              - "comprehend:DetectSentiment"
+              - "comprehend:DetectEntities"
+              - "comprehend:ListDocumentClassifiers"
+              - "comprehend:DetectSyntax"
+              - "comprehend:DetectKeyPhrases"
+            Resource: "*"
+          -
+            Effect: "Allow"
+            Action:
+              - "translate:TranslateText"
+            Resource: "*"
+          -
+            Effect: "Allow"
+            Action:
+              - "s3:PutObject"
+            Resource:
+              - !Sub ${createS3Bucket.Arn}/*
+          -
+            Effect: "Allow"
+            Action:
+              - "connect:UpdateContactAttributes"
+            Resource: "*"
+
+  AIPoweredSpeechAnalyticsSTSTokenLambdaIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: connect-aipsas-ststoken
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:UpdateItem"
+                Resource:
+                  - !Sub ${contactDetailsDDBTable.Arn}
+              - Effect: "Allow"
+                Action:
+                  - 'sts:AssumeRole'
+                Resource:
+                  - !GetAtt AIPoweredSpeechAnalyticsConnectUserStsRole.Arn
+
+  kvsTranscriber:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description:  >
+        Process audio from Kinesis Video Stream and use Amazon Transcribe to get text
+        for the caller audio. Will be invoked by the kvsConsumerTrigger Lambda, writes results to the
+        transcriptSegmentsTable, and uploads the audio file to S3.
+
+      Handler: "com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest"
+      Role: !GetAtt AIPoweredSpeechAnalyticsKvsTranscribeRole.Arn
+      Runtime: java8
+      MemorySize: 512
+      # maximum timeout is 15 minutes today
+      Timeout: 900
+      Environment:
+        Variables:
+          # JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStore=lib/InternalAndExternalTrustStore.jks -Djavax.net.ssl.trustStorePassword=amazon"
+          APP_REGION: !Ref "AWS::Region"
+          TRANSCRIBE_REGION: !Ref "AWS::Region"
+          RECORDINGS_BUCKET_NAME: !Ref s3BucketName
+          RECORDINGS_KEY_PREFIX: !Ref audioFilePrefix
+          INPUT_KEY_PREFIX: !Ref rawAudioUploadPrefix
+          TABLE_CALLER_TRANSCRIPT: !Ref transcriptSegmentsTable
+          RECORDINGS_PUBLIC_READ_ACL: "FALSE"
+          CONSOLE_LOG_TRANSCRIPT_FLAG: "TRUE"
+          LOGGING_LEVEL: "FINE"
+          SAVE_PARTIAL_TRANSCRIPTS: "TRUE"
+          START_SELECTOR_TYPE: "NOW"
+          SEND_ANONYMOUS_DATA: !FindInMap [ "Send", "AnonymousUsage", "Data"]
+
+      Code:
+        S3Bucket: !Ref existingS3BucketName
+        S3Key: !Join ["", [!Ref existingS3Path, 'kvs_transcribe_streaming_lambda.zip']]
+
+  kvsConsumerTrigger:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description:  >
+        AWS Lambda Function to start (asynchronous) streaming transcription; it is expected to be called by the
+        Amazon Connect Contact Flow.
+      Handler: "kvs_trigger.handler"
+      Role: !GetAtt AIPoweredSpeechAnalyticsKvsTriggerRole.Arn
+      Runtime: "nodejs8.10"
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          transcriptionFunction: !Ref kvsTranscriber
+      Code:
+        S3Bucket: !Ref existingS3BucketName
+        S3Key: !Join ["", [!Ref existingS3Path, 'kvs_trigger.zip']]
+
+  initContactDetails:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description:  >
+        AWS Lambda Function that will be triggered when the call starts so that we have the initial contact details which can later add to when we have the transcript, and audio file location.
+      Handler: "contact_init.handler"
+      Role: !GetAtt AIPoweredSpeechAnalyticsSTSTokenLambdaIAMRole.Arn
+      Runtime: "nodejs8.10"
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          table_name: !Ref contactDetailsTable
+          assume_role: !GetAtt AIPoweredSpeechAnalyticsConnectUserStsRole.Arn
+      Code:
+        S3Bucket: !Ref existingS3BucketName
+        S3Key: !Join ["", [!Ref existingS3Path, 'contact_init.zip']]
+
+  processContactSummary:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description:  >
+        AWS Lambda Function that will be triggered when the wav call recording file is placed in S3. This function will collect all the transcript segments, and the audio file location and update the contact db.
+      Handler: "process_contact.handler"
+      Role: !GetAtt AIPoweredSpeechAnalyticsProcessContactRole.Arn
+      Runtime: "nodejs8.10"
+      MemorySize: 256
+      Timeout: 120
+      Environment:
+        Variables:
+          contact_table_name: !Ref contactDetailsTable
+          transcript_seg_table_name: !Ref transcriptSegmentsTable
+      Code:
+        S3Bucket: !Ref existingS3BucketName
+        S3Key: !Join ["", [!Ref existingS3Path, 'process_contact.zip']]
+
+  contactFlowCreator:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description:  >
+        AWS Lambda Function that will create the initial sample contact flow and upload it to the S3 bucket
+      Handler: "create_contact_flow.handler"
+      Role: !GetAtt AIPoweredSpeechAnalyticsContactFlowCreatorRole.Arn
+      Runtime: "nodejs8.10"
+      MemorySize: 256
+      Timeout: 120
+      Code:
+        S3Bucket: !Ref existingS3BucketName
+        S3Key: !Join ["", [!Ref existingS3Path, 'create_contact_flow.zip']]
+
+  invokeContactFlowCreator:
+    Type: Custom::CreateKVSContactFlow
+    Properties:
+      ServiceToken:
+        !GetAtt contactFlowCreator.Arn
+      bucketName:
+        !Ref createS3Bucket
+      contactInitFunction:
+        !GetAtt initContactDetails.Arn
+      kvsTriggerFunction:
+        !GetAtt kvsConsumerTrigger.Arn

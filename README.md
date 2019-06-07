@@ -6,9 +6,7 @@ Making it easy to get started with Amazon Connect live audio streaming and real-
 - [Project Overview](#project-overview)
 - [Architecture Overview](#architecture-overview)
 - [Getting Started](#getting-started)
-- [Lambda Environment Variables](#lambda-environment-variables)
-- [Lambda Invocation Event Details](#lambda-invocation-event-details)
-- [Sample Trigger Lambda](#Sample-trigger-Lambda-function)
+- [Project Variations](#project-variations)
 
 ## Project Overview
 The purpose of this project is to provide a code example and a fully functional Lambda function to get you started with capturing and transcribing Amazon Connect phone calls using Kinesis Video Streams and Amazon Transcribe. This Lambda function can be used to create varying solutions such as capturing audio in the IVR, providing real-time transcription to agents, or even creating a voicemail solution for Amazon Connect. To enable these different use-cases there are multiple [environment variables](#lambda-environment-variables) and parameters in the [invocation event](#lambda-invocation-event-details) that control the behavior of the Lambda Function.
@@ -29,7 +27,6 @@ In the diagram above, once a call is connected to Amazon Connect:
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `transcribeCall` and a value of either `true` or `false`
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `saveCallRecording` and a value of either `true` or `false`
     - tip: Set a Contact Attribute prior to invoking the trigger lambda with a key of: `languageCode` and a value of either `en-US` or `es-US`
-    - The [Sample Trigger Lambda Function](#Sample-trigger-Lambda-function) is set up to look for these attributes and include them in the invocation event that will be sent in (Step 3)
 - (Step 3) The "trigger" Lambda Function will take the details from Amazon Connect, and invoke the Java Lambda (from this project) passing it all the details needed for it to start consuming the Kinesis Video Stream (call audio). Once the trigger lambda returns `success` back to the Amazon Connect Contact Flow, the flow will continue to execute while the KVS Consumer/transcriber Lambda function continues to process the audio
 - (Step 4) The KVS Consumer/transcriber function will continue to process audio for up to 15 minutes (Lambda limit) or until the call is disconnected
 
@@ -38,41 +35,37 @@ The Lambda code expects the Kinesis Video Stream details provided by the Amazon 
 As of this writing Amazon Transcribe supports real time transcription of US-English and US-Spanish. See the Amazon Transcribe [streaming documentation](https://docs.aws.amazon.com/transcribe/latest/dg/streaming.html) for the latest supported languages.
 
 ## Getting Started
-Getting started with this project is easy. The most basic use case of capturing audio in the Amazon Connect IVR can be accomplished by downloading the pre-packaged Lambda Function, deploying it in your account, giving it the correct permissions to access S3 and KVS, and then invoking it and passing the details in the invocation event.
+Getting started with this project is easy. The most basic use case of capturing audio in the Amazon Connect IVR can be accomplished by downloading the pre-packaged Lambda Functions, deploying the CloudFormation template in your account, and importing the Contact Flows into your Amazon Connect Instance. 
 
 ### Easy Setup
-The simplest way to get started is to:
-- Ensure that your Amazon Connect instance has the "live media streaming" feature enabled by following the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html) for "Enable Live Media Streaming"
-- Create a "trigger" lambda function that can be invoked from the Amazon Connect Contact Flow that will pass the following details to this Java lambda function:
-    - streamARN (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect)    
-    - startFragmentNum (will be provided after the successful execution of the "Start Media Streaming" block in Amazon Connect) 
-    - connectContactId (The contact ID for this call)
-    - transcriptionEnabled
-        - Possible values are either `true` or `false`
-        - default behavior if this is not passed is false (no transcription will occur)
-        - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
-    - saveCallRecording
-        - Possible values are either `true` or `false`
-        - default behavior if this is not passed is false (audio file will not be uploaded to S3)
-        - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
-    - languageCode
-        - Possible values are either `en-US` or `es-US` - See the Amazon Transcribe [streaming documentation](https://docs.aws.amazon.com/transcribe/latest/dg/streaming.html) for the latest supported languages.
-        - default behavior if this is not passed is `en-US` (US English)
-        - This value can be set dynamically in the Amazon Connect Contact Flow as a contact attribute that the trigger lambda function will use and pass to this Java lambda function
-- Create (or use an existing) S3 bucket for the audio files to be uploaded
-- If you would like to use the real-time transcription feature:
-    - Create a DynamoDB table, with the "Partition Key" named as `ContactId` having String data type , and "Sort Key" named `StartTime` having Number data type
-- [Download](https://github.com/aws-samples/amazon-connect-realtime-transcription/raw/master/dist/amazon-connect-realtime-transcription.zip) and deploy the pre-packaged Lambda function
-    - Ensure that the lambda execution role assigned has access to the services you plan to enable
-    - Set the timeout on the lambda function to the correct limit to handle the length of calls you plan on processing with this function (up to 15 min)
-    - The handler for the lambda function is: `com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest`
-- Populate the [environment variables](#lambda-environment-variables) with the correct details for your solution
-
+- Clone the github repo into your account.
+- Create an S3 bucket and upload the deployment/ folder into it
+    - Open the cloudformation.yaml file and copy the S3 url on it's detail page
+- Go to CloudFormation and select 'Create Stack'.
+    - Create the stack from an S3 url and paste the url from the cloudformation.yaml file
+    - Fill in the parameters for the stack. The existingS3BucketName and existingS3Path should be the ones created above that contain all the deployment related code.
+- While the stack is building, go to the Amazon Connect console and ensure that your Amazon Connect instance has the "live media streaming" feature enabled by following the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html) for "Enable Live Media Streaming"
+- Once the stack is complete, go to the S3 bucket that was created to download the Contact Flows you want to use in your solution. (See the [Project Variations](#project-variations) section to decide which Contact Flows to use)
+- Log into your Amazon Connect instance and import the Contact Flow(s) you want to use
+- In your Amazon Connect instance, claim a Phone Number and assign the Contact Flow you created to it and call the number. Depending on the settings in the KvsTranscriber Lambda Function, the audio will be saved in S3 and the transcriptions will be visible in DynamoDB
 
 ### Building the project
-The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application.
+The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application. After running `gradle build`, the updated zip file can be found in the `build/distributions` folder
 
-## Lambda Environment Variables
+## Project Variations
+There are 3 main variations to this project: streaming customer audio once the customer is in queue, streaming customer audio once the agent answers the call, and streaming customer audio to create a voice mail solution.
+- Streaming customer audio while the customer is in the queue
+    - To enable streaming once in queue, you will want to use the kvsStreamingSampleFlowWithNoWhisper Contact Flow since it starts video streaming in the main Contact Flow
+    - You will also need to set the `START_SELECTOR_TYPE` environment variable in the KvsTranscriber Lambda function to `FRAGMENT_NUMBER`
+- Streaming customer audio once the agent answers the call
+    - You will need both kvsStreamingSampleFlowWithWhisper and agentWhisperKvsStreamingSampleFlow Contact Flows. Be sure to import and publish the agentWhisperKvsStreamingSampleFlow Contact Flow first since the kvsStreamingSampleFlowWithWhisper one depends on it.
+    - You will also need to set the `START_SELECTOR_TYPE` environment variable in the KvsTranscriber Lambda function to `NOW`
+- Streaming customer audio to create a voice mail solution
+    - Before importing the Contact Flows, you need to create a queue called 'Voice Mail Queue'. It is recommended to create an Hours of Operation object that is open 24/7 so customers can always leave a voice mail. Reference the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/adminguide/connect-queues.html) to create Queues and Hours of Operation objects.
+    - You will need both the voiceMailQueueFlow and kvsStreamingFlowForVoiceMail Contact Flows. Be sure to import and publish the voiceMailQueueFlow Contact Flow first since the kvsStreamingFlowForVoiceMail flow depends on it.
+    - You will also need to set the `START_SELECTOR_TYPE` environment variable in the KvsTranscriber Lambda function to `NOW`
+
+### Lambda Environment Variables
 This Lambda Function has environment variables that control its behavior:
 * `APP_REGION` - The region for AWS DynamoDB, S3 and Kinesis Video Streams resources (ie: us-east-1)
 * `TRANSCRIBE_REGION` - The region to be used for AWS Transcribe Streaming (ie: us-east-1)
@@ -85,10 +78,10 @@ This Lambda Function has environment variables that control its behavior:
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
 * `START_SELECTOR_TYPE` - Set to NOW to get transcribe once the agent and user are connected. Set to FRAGMENT_NUMBER to start transcribing once the 'Start Media Streaming' block is executed in your contact flow
 
-### Sample Lambda Environment Variables
+#### Sample Lambda Environment Variables
 ![](images/env-variables-example.png)
 
-## Lambda Invocation Event Details
+### Lambda Invocation Event Details
 This Lambda Function will need some details when invoked:
 * `streamARN` - The ARN of the Kinesis Video stream that includes the customer audio, this is provided by Amazon Connect when streaming is started successfully
 * `startFragmentNum` - Identifies the Kinesis Video Streams fragment in which the customer audio stream started, this is provided by Amazon Connect when streaming is started successfully
@@ -97,7 +90,7 @@ This Lambda Function will need some details when invoked:
 * `saveCallRecording` - An optional flag to instruct the Lambda function to upload the saved audio to S3 (options are "true" or "false")
 * `languageCode` - An optional flag to instruct the Lambda function on what language the source customer audio is in, as of this writing the options are: "en-US" or "es-US" (US-English, or US-Spanish)
 
-### Sample Lambda Invocation Event
+#### Sample Lambda Invocation Event
 The following is a sample invocation event:
 
 ```
@@ -110,77 +103,6 @@ The following is a sample invocation event:
        "languageCode": "en-US" 
     }
 ```
-
-## Sample "trigger Lambda" function
-This is a minimal example of a "trigger" lambda function you can create to be invoked from Amazon Connect. This trigger function will take the details from Amazon Connect, and pass them to the KVS/Transcription Lambda Function from this project:
-
-```
-'use strict';
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda();
-exports.handler = (event, context, callback) => {
-
-    console.log("Received event from Amazon Connect");
-    console.log(JSON.stringify(event));
-
-    /*
-    The following payload is what will be passed to the transcription lambda function. 
-    StreamARN, StartFragmentNumber, and ContactId are included by default from the Amazon Connect invocation event.
-    This payload also assumes you have set contact attributes in the Amazon Connect contact flow with keys of:
-    "transcribeCall", "saveCallRecording", and "languageCode" to dynamically control the transcription function behavior.
-    If these attributes are not set in your contact flow then transcriptionEnabled will default to "false", saveCallRecording
-    will default to "true", and languageCode will default to "en-US".
-    */
-
-    let payload = {
-        streamARN: event.Details.ContactData.MediaStreams.Customer.Audio.StreamARN,
-        startFragmentNum: event.Details.ContactData.MediaStreams.Customer.Audio.StartFragmentNumber,
-        connectContactId: event.Details.ContactData.ContactId,
-        transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
-        saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "false" ? false : true,
-        languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US"
-    };
-
-    console.log("Trigger event passed to transcriberFunction" + JSON.stringify(payload));
-
-    const params = {
-        // not passing in a ClientContext
-        //Use an environment variable called transcriptionFunction with the value of the transcription-KVS lambda function name
-        'FunctionName': process.env.transcriptionFunction,
-        // InvocationType is RequestResponse by default
-        // LogType is not set so we won't get the last 4K of logs from the invoked function
-        // Qualifier is not set so we use $LATEST
-        'InvokeArgs': JSON.stringify(payload)
-    };
-
-    lambda.invokeAsync(params, function (err, data) {
-
-        if (err)
-            throw (err);
-        else {
-            console.log(JSON.stringify(data));
-            if (callback)
-                callback(null, buildResponse());
-            else
-                console.log('nothing to callback so letting it go');
-        }
-    });
-
-    callback(null, buildResponse());
-};
-
-function buildResponse() {
-
-    return {
-        // we always return "Success" for now
-        lambdaResult: "Success"
-    };
-}
-
-
-```
-
-
 
 ## License Summary
 This sample code is made available under a modified MIT license. See the LICENSE file.
