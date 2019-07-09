@@ -23,7 +23,7 @@ const uuid = nodeUuid.v4();
 
 exports.handler = (event, context, callback) => {
 
-    console.log("Received event from Amazon Connect");
+    console.log("Received event from Amazon Connect " + JSON.stringify(event));
 
     let payload = "";
 
@@ -40,7 +40,10 @@ exports.handler = (event, context, callback) => {
             connectContactId: event.Details.ContactData.ContactId,
             transcriptionEnabled: event.Details.ContactData.Attributes.transcribeCall === "true" ? true : false,
             saveCallRecording: event.Details.ContactData.Attributes.saveCallRecording === "false" ? false : true,
-            languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US"
+            languageCode: event.Details.ContactData.Attributes.languageCode === "es-US" ? "es-US" : "en-US",
+            // These default to true for backwards compatability purposes
+            streamAudioFromCustomer: event.Details.ContactData.Attributes.streamAudioFromCustomer === "false" ? false : true,
+            streamAudioToCustomer: event.Details.ContactData.Attributes.streamAudioToCustomer === "false" ? false : true
         };
     }
 

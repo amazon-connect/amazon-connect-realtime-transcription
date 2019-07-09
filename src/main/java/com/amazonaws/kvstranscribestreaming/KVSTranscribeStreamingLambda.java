@@ -26,12 +26,7 @@ import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
 import software.amazon.awssdk.services.transcribestreaming.model.MediaEncoding;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionRequest;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -75,14 +70,17 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
     private static final boolean CONSOLE_LOG_TRANSCRIPT_FLAG = Boolean.parseBoolean(System.getenv("CONSOLE_LOG_TRANSCRIPT_FLAG"));
     private static final boolean RECORDINGS_PUBLIC_READ_ACL = Boolean.parseBoolean(System.getenv("RECORDINGS_PUBLIC_READ_ACL"));
     private static final String START_SELECTOR_TYPE = System.getenv("START_SELECTOR_TYPE");
+    private static final String TABLE_CALLER_TRANSCRIPT = System.getenv("TABLE_CALLER_TRANSCRIPT");
+    private static final String TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER = System.getenv("TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER");
 
     private static final Logger logger = LoggerFactory.getLogger(KVSTranscribeStreamingLambda.class);
     public static final MetricsUtil metricsUtil = new MetricsUtil(AmazonCloudWatchClientBuilder.defaultClient());
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 
 
     // SegmentWriter saves Transcription segments to DynamoDB
-    private TranscribedSegmentWriter segmentWriter = null;
+    private TranscribedSegmentWriter fromCustomerSegmentWriter = null;
+    private TranscribedSegmentWriter toCustomerSegmentWriter = null;
 
     /**
      * Handler function for the Lambda
@@ -104,7 +102,9 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
             // create a SegmentWriter to be able to save off transcription results
             AmazonDynamoDBClientBuilder builder = AmazonDynamoDBClientBuilder.standard();
             builder.setRegion(REGION.getName());
-            segmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()),
+            fromCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()),
+                    CONSOLE_LOG_TRANSCRIPT_FLAG);
+            toCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()),
                     CONSOLE_LOG_TRANSCRIPT_FLAG);
 
             // If an inputFileName has been provided in the request, stream audio from the file to Transcribe
@@ -113,7 +113,9 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
             }
             // Else start streaming between KVS and Transcribe
             else {
-                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(), request.isTranscriptionEnabled(), request.getLanguageCode(), request.getSaveCallRecording());
+                startKVSToTranscribeStreaming(request.getStreamARN(), request.getStartFragmentNum(), request.getConnectContactId(),
+                        request.isTranscriptionEnabled(), request.getLanguageCode(), request.getSaveCallRecording(),
+                        request.isStreamAudioFromCustomer(), request.isStreamAudioToCustomer());
             }
 
             return "{ \"result\": \"Success\" }";
@@ -135,34 +137,48 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
      * @param languageCode
      * @throws Exception
      */
-    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled, Optional<String> languageCode, Optional<Boolean> saveCallRecording) throws Exception {
-
-        Path saveAudioFilePath = Paths.get("/tmp", contactId + "_" + DATE_FORMAT.format(new Date()) + ".raw");
-        FileOutputStream fileOutputStream = new FileOutputStream(saveAudioFilePath.toString());
+    private void startKVSToTranscribeStreaming(String streamARN, String startFragmentNum, String contactId, boolean transcribeEnabled,
+                                               Optional<String> languageCode, Optional<Boolean> saveCallRecording,
+                                               boolean isStreamAudioFromCustomerEnabled, boolean isStreamAudioToCustomerEnabled) throws Exception {
         String streamName = streamARN.substring(streamARN.indexOf("/") + 1, streamARN.lastIndexOf("/"));
 
-        InputStream kvsInputStream = KVSUtils.getInputStreamFromKVS(streamName, REGION, startFragmentNum, getAWSCredentials(), START_SELECTOR_TYPE);
-        StreamingMkvReader streamingMkvReader = StreamingMkvReader.createDefault(new InputStreamParserByteSource(kvsInputStream));
+        KVSStreamTrackObject kvsStreamTrackObjectFromCustomer = null;
+        KVSStreamTrackObject kvsStreamTrackObjectToCustomer = null;
 
-        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor = new FragmentMetadataVisitor.BasicMkvTagProcessor();
-        FragmentMetadataVisitor fragmentVisitor = FragmentMetadataVisitor.create(Optional.of(tagProcessor));
+        if (isStreamAudioFromCustomerEnabled) {
+            kvsStreamTrackObjectFromCustomer = getKVSStreamTrackObject(streamName, startFragmentNum, KVSUtils.TrackName.AUDIO_FROM_CUSTOMER.getName(), contactId);
+        }
+        if (isStreamAudioToCustomerEnabled) {
+            kvsStreamTrackObjectToCustomer = getKVSStreamTrackObject(streamName, startFragmentNum, KVSUtils.TrackName.AUDIO_TO_CUSTOMER.getName(), contactId);
+        }
 
         if (transcribeEnabled) {
             try (TranscribeStreamingRetryClient client = new TranscribeStreamingRetryClient(getTranscribeCredentials(),
                     TRANSCRIBE_ENDPOINT, TRANSCRIBE_REGION, metricsUtil)) {
 
                 logger.info("Calling Transcribe service..");
+                CompletableFuture<Void> fromCustomerResult = null;
+                CompletableFuture<Void> toCustomerResult = null;
 
-                CompletableFuture<Void> result = client.startStreamTranscription(
-                        // since we're definitely working with telephony audio, we know that's 8 kHz
-                        getRequest(8000, languageCode),
-                        new KVSAudioStreamPublisher(streamingMkvReader, contactId, fileOutputStream, tagProcessor, fragmentVisitor),
-                        new StreamTranscriptionBehaviorImpl(segmentWriter)
-                );
+                if (kvsStreamTrackObjectFromCustomer != null) {
+                    fromCustomerResult = getStartStreamingTranscriptionFuture(kvsStreamTrackObjectFromCustomer,
+                            languageCode, contactId, client, fromCustomerSegmentWriter, TABLE_CALLER_TRANSCRIPT, KVSUtils.TrackName.AUDIO_FROM_CUSTOMER.getName());
+                }
+
+                if (kvsStreamTrackObjectToCustomer != null) {
+                    toCustomerResult = getStartStreamingTranscriptionFuture(kvsStreamTrackObjectToCustomer,
+                            languageCode, contactId, client, toCustomerSegmentWriter, TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER, KVSUtils.TrackName.AUDIO_TO_CUSTOMER.getName());
+                }
 
                 // Synchronous wait for stream to close, and close client connection
                 // Timeout of 890 seconds because the Lambda function can be run for at most 15 mins (~890 secs)
-                result.get(890, TimeUnit.SECONDS);
+                if (null != fromCustomerResult) {
+                    fromCustomerResult.get(890, TimeUnit.SECONDS);
+                }
+
+                if (null != toCustomerResult) {
+                    toCustomerResult.get(890, TimeUnit.SECONDS);
+                }
 
             } catch (TimeoutException e) {
                 logger.debug("Timing out KVS to Transcribe Streaming after 890 sec");
@@ -172,23 +188,32 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
                 throw e;
 
             } finally {
-                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId, saveCallRecording);
+                if (kvsStreamTrackObjectFromCustomer != null) {
+                    closeFileAndUploadRawAudio(kvsStreamTrackObjectFromCustomer, contactId, saveCallRecording);
+                }
+                if (kvsStreamTrackObjectToCustomer != null) {
+                    closeFileAndUploadRawAudio(kvsStreamTrackObjectToCustomer, contactId, saveCallRecording);
+                }
             }
         } else {
             try {
                 logger.info("Saving audio bytes to location");
 
                 //Write audio bytes from the KVS stream to the temporary file
-                ByteBuffer audioBuffer = KVSUtils.getByteBufferFromStream(streamingMkvReader, fragmentVisitor, tagProcessor, contactId);
-                while (audioBuffer.remaining() > 0) {
-                    byte[] audioBytes = new byte[audioBuffer.remaining()];
-                    audioBuffer.get(audioBytes);
-                    fileOutputStream.write(audioBytes);
-                    audioBuffer = KVSUtils.getByteBufferFromStream(streamingMkvReader, fragmentVisitor, tagProcessor, contactId);
+                if (kvsStreamTrackObjectFromCustomer != null) {
+                    writeAudioBytesToKvsStream(kvsStreamTrackObjectFromCustomer, contactId);
+                }
+                if (kvsStreamTrackObjectToCustomer != null) {
+                    writeAudioBytesToKvsStream(kvsStreamTrackObjectToCustomer, contactId);
                 }
 
             } finally {
-                closeFileAndUploadRawAudio(kvsInputStream, fileOutputStream, saveAudioFilePath, contactId, saveCallRecording);
+                if (kvsStreamTrackObjectFromCustomer != null) {
+                    closeFileAndUploadRawAudio(kvsStreamTrackObjectFromCustomer, contactId, saveCallRecording);
+                }
+                if (kvsStreamTrackObjectToCustomer != null) {
+                    closeFileAndUploadRawAudio(kvsStreamTrackObjectToCustomer, contactId, saveCallRecording);
+                }
             }
         }
     }
@@ -219,7 +244,8 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
                     // since we're definitely working with telephony audio, we know that's 8 kHz
                     getRequest(8000, languageCode),
                     new FileAudioStreamPublisher(inputStream),
-                    new StreamTranscriptionBehaviorImpl(segmentWriter)
+                    new StreamTranscriptionBehaviorImpl(fromCustomerSegmentWriter, TABLE_CALLER_TRANSCRIPT),
+                    "None"
             );
 
             // Synchronous wait for stream to close, and close client connection
@@ -239,24 +265,88 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
     /**
      * Closes the FileOutputStream and uploads the Raw audio file to S3
      *
-     * @param kvsInputStream
-     * @param fileOutputStream
-     * @param saveAudioFilePath
+     * @param kvsStreamTrackObject
      * @param saveCallRecording should the call recording be uploaded to S3?
      * @throws IOException
      */
-    private void closeFileAndUploadRawAudio(InputStream kvsInputStream, FileOutputStream fileOutputStream,
-                                            Path saveAudioFilePath, String contactId, Optional<Boolean> saveCallRecording) throws IOException {
+    private void closeFileAndUploadRawAudio(KVSStreamTrackObject kvsStreamTrackObject, String contactId, Optional<Boolean> saveCallRecording) throws IOException {
 
-        kvsInputStream.close();
-        fileOutputStream.close();
+        kvsStreamTrackObject.getInputStream().close();
+        kvsStreamTrackObject.getOutputStream().close();
 
         //Upload the Raw Audio file to S3
-        if ((saveCallRecording.isPresent() ? saveCallRecording.get() : false) && (new File(saveAudioFilePath.toString()).length() > 0)) {
-            AudioUtils.uploadRawAudio(REGION, RECORDINGS_BUCKET_NAME, RECORDINGS_KEY_PREFIX, saveAudioFilePath.toString(), contactId, RECORDINGS_PUBLIC_READ_ACL,
+        if ((saveCallRecording.isPresent() ? saveCallRecording.get() : false) && (new File(kvsStreamTrackObject.getSaveAudioFilePath().toString()).length() > 0)) {
+            AudioUtils.uploadRawAudio(REGION, RECORDINGS_BUCKET_NAME, RECORDINGS_KEY_PREFIX, kvsStreamTrackObject.getSaveAudioFilePath().toString(), contactId, RECORDINGS_PUBLIC_READ_ACL,
                     getAWSCredentials());
         } else {
-            logger.info("Skipping upload to S3.  saveCallRecording was disabled or audio file has 0 bytes: " + saveAudioFilePath);
+            logger.info("Skipping upload to S3.  saveCallRecording was disabled or audio file has 0 bytes: " + kvsStreamTrackObject.getSaveAudioFilePath().toString());
+        }
+
+    }
+
+    /**
+     * Create all objects necessary for KVS streaming from each track
+     *
+     * @param streamName
+     * @param startFragmentNum
+     * @param trackName
+     * @param contactId
+     * @return
+     * @throws FileNotFoundException
+     */
+    private KVSStreamTrackObject getKVSStreamTrackObject(String streamName, String startFragmentNum, String trackName,
+                                                         String contactId) throws FileNotFoundException {
+        InputStream kvsInputStream = KVSUtils.getInputStreamFromKVS(streamName, REGION, startFragmentNum, getAWSCredentials(), START_SELECTOR_TYPE);
+        StreamingMkvReader streamingMkvReader = StreamingMkvReader.createDefault(new InputStreamParserByteSource(kvsInputStream));
+
+        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor = new FragmentMetadataVisitor.BasicMkvTagProcessor();
+        FragmentMetadataVisitor fragmentVisitor = FragmentMetadataVisitor.create(Optional.of(tagProcessor));
+
+        String fileName = String.format("%s_%s_%s.raw", contactId, DATE_FORMAT.format(new Date()), trackName);
+        Path saveAudioFilePath = Paths.get("/tmp", fileName);
+        FileOutputStream fileOutputStream = new FileOutputStream(saveAudioFilePath.toString());
+
+        return new KVSStreamTrackObject(kvsInputStream, streamingMkvReader, tagProcessor, fragmentVisitor, saveAudioFilePath, fileOutputStream, trackName);
+    }
+
+
+    private CompletableFuture<Void> getStartStreamingTranscriptionFuture(KVSStreamTrackObject kvsStreamTrackObject, Optional<String> languageCode,
+                                                                         String contactId, TranscribeStreamingRetryClient client,
+                                                                         TranscribedSegmentWriter transcribedSegmentWriter,
+                                                                         String tableName, String channel) {
+        return client.startStreamTranscription(
+                // since we're definitely working with telephony audio, we know that's 8 kHz
+                getRequest(8000, languageCode),
+                new KVSAudioStreamPublisher(
+                        kvsStreamTrackObject.getStreamingMkvReader(),
+                        contactId,
+                        kvsStreamTrackObject.getOutputStream(),
+                        kvsStreamTrackObject.getTagProcessor(),
+                        kvsStreamTrackObject.getFragmentVisitor(),
+                        kvsStreamTrackObject.getTrackName()),
+                new StreamTranscriptionBehaviorImpl(transcribedSegmentWriter, tableName),
+                channel
+        );
+    }
+
+    /**
+     * Write the kvs stream to the output buffer
+     *
+     * @param kvsStreamTrackObject
+     * @param contactId
+     * @throws Exception
+     */
+    private void writeAudioBytesToKvsStream(KVSStreamTrackObject kvsStreamTrackObject, String contactId) throws Exception {
+
+        ByteBuffer audioBuffer = KVSUtils.getByteBufferFromStream(kvsStreamTrackObject.getStreamingMkvReader(),
+                kvsStreamTrackObject.getFragmentVisitor(), kvsStreamTrackObject.getTagProcessor(), contactId, kvsStreamTrackObject.getTrackName());
+
+        while (audioBuffer.remaining() > 0) {
+            byte[] audioBytes = new byte[audioBuffer.remaining()];
+            audioBuffer.get(audioBytes);
+            kvsStreamTrackObject.getOutputStream().write(audioBytes);
+            audioBuffer = KVSUtils.getByteBufferFromStream(kvsStreamTrackObject.getStreamingMkvReader(),
+                    kvsStreamTrackObject.getFragmentVisitor(), kvsStreamTrackObject.getTagProcessor(), contactId, kvsStreamTrackObject.getTrackName());
         }
     }
 
@@ -303,19 +393,22 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
         private OutputStream outputStream;
         private FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor;
         private FragmentMetadataVisitor fragmentVisitor;
+        private String track;
 
         private KVSAudioStreamPublisher(StreamingMkvReader streamingMkvReader, String contactId, OutputStream outputStream,
-                                        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor) {
+                                        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor,
+                                        String track) {
             this.streamingMkvReader = streamingMkvReader;
             this.contactId = contactId;
             this.outputStream = outputStream;
             this.tagProcessor = tagProcessor;
             this.fragmentVisitor = fragmentVisitor;
+            this.track = track;
         }
 
         @Override
         public void subscribe(Subscriber<? super AudioStream> s) {
-            s.onSubscribe(new KVSByteToAudioEventSubscription(s, streamingMkvReader, contactId, outputStream, tagProcessor, fragmentVisitor));
+            s.onSubscribe(new KVSByteToAudioEventSubscription(s, streamingMkvReader, contactId, outputStream, tagProcessor, fragmentVisitor, track));
         }
     }
 

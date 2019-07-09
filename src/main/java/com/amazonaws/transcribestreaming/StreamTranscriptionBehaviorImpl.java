@@ -29,9 +29,11 @@ public class StreamTranscriptionBehaviorImpl implements StreamTranscriptionBehav
 
     private static final Logger logger = LoggerFactory.getLogger(StreamTranscriptionBehaviorImpl.class);
     private final TranscribedSegmentWriter segmentWriter;
+    private final String tableName;
 
-    public StreamTranscriptionBehaviorImpl(TranscribedSegmentWriter segmentWriter) {
+    public StreamTranscriptionBehaviorImpl(TranscribedSegmentWriter segmentWriter, String tableName) {
         this.segmentWriter = segmentWriter;
+        this.tableName = tableName;
     }
 
     @Override
@@ -43,7 +45,7 @@ public class StreamTranscriptionBehaviorImpl implements StreamTranscriptionBehav
     public void onStream(TranscriptResultStream e) {
         // EventResultStream has other fields related to the timestamp of the transcripts in it.
         // Please refer to the javadoc of TranscriptResultStream for more details
-        segmentWriter.writeToDynamoDB((TranscriptEvent) e);
+        segmentWriter.writeToDynamoDB((TranscriptEvent) e, tableName);
     }
 
     @Override

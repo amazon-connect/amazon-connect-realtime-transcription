@@ -35,7 +35,6 @@ public class TranscribedSegmentWriter {
     private String contactId;
     private DynamoDB ddbClient;
     private Boolean consoleLogTranscriptFlag;
-    private static final String TABLE_CALLER_TRANSCRIPT = System.getenv("TABLE_CALLER_TRANSCRIPT");
     private static final boolean SAVE_PARTIAL_TRANSCRIPTS = Boolean.parseBoolean(System.getenv("SAVE_PARTIAL_TRANSCRIPTS"));
     private static final Logger logger = LoggerFactory.getLogger(TranscribedSegmentWriter.class);
 
@@ -56,8 +55,9 @@ public class TranscribedSegmentWriter {
         return this.ddbClient;
     }
 
-    public void writeToDynamoDB(TranscriptEvent transcriptEvent) {
-
+    public void writeToDynamoDB(TranscriptEvent transcriptEvent, String tableName) {
+        logger.info("table name: " + tableName);
+        logger.info("Transcription event: " + transcriptEvent.transcript().toString());
         List<Result> results = transcriptEvent.transcript().results();
         if (results.size() > 0) {
 
@@ -67,7 +67,7 @@ public class TranscribedSegmentWriter {
                 try {
                     Item ddbItem = toDynamoDbItem(result);
                     if (ddbItem != null) {
-                        getDdbClient().getTable(TABLE_CALLER_TRANSCRIPT).putItem(ddbItem);
+                        getDdbClient().getTable(tableName).putItem(ddbItem);
                     }
 
                 } catch (Exception e) {

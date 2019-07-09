@@ -6,6 +6,8 @@ import com.amazonaws.kvstranscribestreaming.KVSUtils;
 import org.apache.commons.lang3.Validate;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioEvent;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
@@ -38,25 +40,29 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class KVSByteToAudioEventSubscription implements Subscription {
 
+    private static final Logger logger = LoggerFactory.getLogger(KVSByteToAudioEventSubscription.class);
+
     private static final int CHUNK_SIZE_IN_KB = 4;
-    private ExecutorService executor = Executors.newFixedThreadPool(1);
-    private AtomicLong demand = new AtomicLong(0);
+    private ExecutorService executor = Executors.newFixedThreadPool(1); // Change nThreads here!! used in SubmissionPublisher not subscription
+    private AtomicLong demand = new AtomicLong(0); // state container
     private final Subscriber<? super AudioStream> subscriber;
     private final StreamingMkvReader streamingMkvReader;
     private String contactId;
     private OutputStream outputStream;
     private final FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor;
     private final FragmentMetadataVisitor fragmentVisitor;
+    private final String track;
 
     public KVSByteToAudioEventSubscription(Subscriber<? super AudioStream> s, StreamingMkvReader streamingMkvReader,
                                            String contactId, OutputStream outputStream, FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor,
-                                           FragmentMetadataVisitor fragmentVisitor) {
+                                           FragmentMetadataVisitor fragmentVisitor, String track) {
         this.subscriber = Validate.notNull(s);
         this.streamingMkvReader = Validate.notNull(streamingMkvReader);
         this.contactId = Validate.notNull(contactId);
         this.outputStream = Validate.notNull(outputStream);
         this.tagProcessor = Validate.notNull(tagProcessor);
         this.fragmentVisitor = Validate.notNull(fragmentVisitor);
+        this.track = Validate.notNull(track);
     }
 
     @Override
@@ -70,7 +76,8 @@ public class KVSByteToAudioEventSubscription implements Subscription {
         executor.submit(() -> {
             try {
                 while (demand.get() > 0) {
-                    ByteBuffer audioBuffer = KVSUtils.getByteBufferFromStream(streamingMkvReader, fragmentVisitor, tagProcessor, contactId, CHUNK_SIZE_IN_KB);
+                    // return byteBufferDetails and consume this with an input stream then feed to output stream
+                    ByteBuffer audioBuffer = KVSUtils.getByteBufferFromStream(streamingMkvReader, fragmentVisitor, tagProcessor, contactId, CHUNK_SIZE_IN_KB, track);
 
                     if (audioBuffer.remaining() > 0) {
 

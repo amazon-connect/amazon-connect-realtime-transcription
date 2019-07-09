@@ -129,7 +129,8 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
 
     public CompletableFuture<Void> startStreamTranscription(final StartStreamTranscriptionRequest request,
                                                             final Publisher<AudioStream> publisher,
-                                                            final StreamTranscriptionBehavior responseHandler) {
+                                                            final StreamTranscriptionBehavior responseHandler,
+                                                            final String channel) {
 
         Validate.notNull(request);
         Validate.notNull(publisher);
@@ -137,7 +138,7 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
 
         CompletableFuture<Void> finalFuture = new CompletableFuture<>();
 
-        recursiveStartStream(rebuildRequestWithSession(request), publisher, responseHandler, finalFuture, 0);
+        recursiveStartStream(rebuildRequestWithSession(request), publisher, responseHandler, finalFuture, 0, channel);
 
         return finalFuture;
     }
@@ -155,12 +156,13 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
                                       final Publisher<AudioStream> publisher,
                                       final StreamTranscriptionBehavior responseHandler,
                                       final CompletableFuture<Void> finalFuture,
-                                      final int retryAttempt) {
+                                      final int retryAttempt, final String channel) {
         CompletableFuture<Void> result = client.startStreamTranscription(request, publisher,
                 getResponseHandler(responseHandler));
         result.whenComplete((r, e) -> {
             if (e != null) {
-                logger.debug("Error occured: " + e.getMessage());
+                logger.debug("Error occurred on channel " + channel +" : " + e.getMessage());
+                e.printStackTrace();
 
                 if (retryAttempt <= maxRetries && isExceptionRetriable(e)) {
                     logger.debug("Retriable error occurred and will be retried.");
@@ -172,7 +174,7 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
                         finalFuture.completeExceptionally(e);
                     }
                     logger.debug("Making retry attempt: " + (retryAttempt + 1));
-                    recursiveStartStream(request, publisher, responseHandler, finalFuture, retryAttempt + 1);
+                    recursiveStartStream(request, publisher, responseHandler, finalFuture, retryAttempt + 1, channel);
                 } else {
                     metricsUtil.recordMetric("TranscribeStreamError", 1);
                     logger.error("Encountered unretriable exception or ran out of retries.", e);
@@ -181,9 +183,9 @@ public class TranscribeStreamingRetryClient implements AutoCloseable {
                 }
             } else {
                 logger.info("Completable future is complete.");
-                finalFuture.complete(null);
+                //metricsUtil.recordMetric("TranscribeStreamError", 0);
                 responseHandler.onComplete();
-                metricsUtil.recordMetric("TranscribeStreamError", 0);
+                finalFuture.complete(null);
             }
         });
     }

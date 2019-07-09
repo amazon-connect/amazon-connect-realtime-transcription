@@ -3,17 +3,16 @@ Description: >
   "AI Powered Speach Analytics for Amazon Connect:
   - Create the basic foundation for streaming customer audio from Amazon Connect by deploying:
   - S3 Bucket for audio files, and the sample contact flow
-  - Dynamo DB tables: transcriptSegments and contactDetails
+  - Dynamo DB tables: transcriptSegments, transcriptSegmentsToCustomer, and contactDetails
   - A Lambda triggered on inbound contacts to store the initial contact details
   - A Lambda to trigger and pass the stream details to the Java Lambda
   - A Java Lambda to consume KVS and stream it to Amazon Transcribe, store the segments in DDB and upload the raw audio to S3
   - A Node.js Lambda triggered by S3 once WAV file is uploaded to store the concatenated transcript segments in the contact details table along with the S3 location of the audio file
   - A Node.js Lambda triggered by CloudFormation to create a sample Amazon Connect contact flow, pre-populated with the Lambda ARNs and placed in the S3 bucket for you to import in to your Amazon Connect instance.
-  - (SO0054-preview)"
 Mappings:
   FunctionMap:
     Configuration:
-      SolutionID: "SO0054"
+      SolutionID: "SOXXXX"
   Send:
     AnonymousUsage:
       Data: "Yes"
@@ -35,6 +34,7 @@ Metadata:
           default: Amazon DynamoDB Configuration
         Parameters:
           - transcriptSegmentsTable
+          - transcriptSegmentsToCustomerTable
           - contactDetailsTable
     ParameterLabels:
       s3BucketName:
@@ -44,7 +44,9 @@ Metadata:
       rawAudioUploadPrefix:
         default: Test Mono Audio Prefix
       transcriptSegmentsTable:
-        default: Transcript Table Name
+        default: Transcript Table Name for audio from the customer
+      transcriptSegmentsToCustomerTable:
+        default: Transcript Table Name for audio to the customer
       contactDetailsTable:
         default: Contacts Table Name
       existingS3Path:
@@ -72,7 +74,11 @@ Parameters:
   transcriptSegmentsTable:
     Type: String
     Default:  contactTranscriptSegments
-    Description:  The name of the DynamoDB Table where segments (utterances) for the caller transcript will be saved (Ensure you do not have a table with this name already).
+    Description:  The name of the DynamoDB Table where segments (utterances) from the customer for the caller transcript will be saved (Ensure you do not have a table with this name already).
+  transcriptSegmentsToCustomerTable:
+    Type: String
+    Default:  contactTranscriptSegmentsToCustomer
+    Description:  The name of the DynamoDB Table where segments (utterances) to the customer for the caller transcript will be saved (Ensure you do not have a table with this name already).
   contactDetailsTable:
     Type: String
     Default:  contactDetails
@@ -214,6 +220,40 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
+  transcriptSegmentsToCustomerDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:  !Ref transcriptSegmentsToCustomerTable
+      AttributeDefinitions:
+        -
+          AttributeName: "ContactId"
+          AttributeType: "S"
+        -
+          AttributeName: "StartTime"
+          AttributeType: "N"
+      KeySchema:
+        -
+          AttributeName: "ContactId"
+          KeyType: "HASH"
+        -
+          AttributeName: "StartTime"
+          KeyType: "RANGE"
+      # assuming 5 concurrent calls
+      ProvisionedThroughput:
+        ReadCapacityUnits:
+          5
+        WriteCapacityUnits:
+          5
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: True
+      TimeToLiveSpecification:
+        AttributeName:  "ExpiresAfter"
+        Enabled:  True
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
   contactDetailsDDBTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -285,6 +325,7 @@ Resources:
                   - "dynamodb:ListStreams"
                 Resource:
                   - !Sub ${transcriptSegmentsDDBTable.Arn}
+                  - !Sub ${transcriptSegmentsToCustomerDDBTable.Arn}
               -
                 Effect: "Allow"
                 Action:
@@ -382,10 +423,11 @@ Resources:
                   - "dynamodb:Query"
                 Resource:
                   - !Sub ${transcriptSegmentsDDBTable.Arn}
+                  - !Sub ${transcriptSegmentsToCustomerDDBTable.Arn}
               -
                 Effect: "Allow"
                 Action:
-                  - "dynamodb:Update"
+                  - "dynamodb:UpdateItem"
                 Resource:
                   - !Sub ${contactDetailsDDBTable.Arn}
 
@@ -533,7 +575,7 @@ Resources:
       Description:  >
         Process audio from Kinesis Video Stream and use Amazon Transcribe to get text
         for the caller audio. Will be invoked by the kvsConsumerTrigger Lambda, writes results to the
-        transcriptSegmentsTable, and uploads the audio file to S3.
+        transcript DynamoDB tables, and uploads the audio file to S3.
 
       Handler: "com.amazonaws.kvstranscribestreaming.KVSTranscribeStreamingLambda::handleRequest"
       Role: !GetAtt AIPoweredSpeechAnalyticsKvsTranscribeRole.Arn
@@ -550,6 +592,7 @@ Resources:
           RECORDINGS_KEY_PREFIX: !Ref audioFilePrefix
           INPUT_KEY_PREFIX: !Ref rawAudioUploadPrefix
           TABLE_CALLER_TRANSCRIPT: !Ref transcriptSegmentsTable
+          TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER: !Ref transcriptSegmentsToCustomerTable
           RECORDINGS_PUBLIC_READ_ACL: "FALSE"
           CONSOLE_LOG_TRANSCRIPT_FLAG: "TRUE"
           LOGGING_LEVEL: "FINE"
@@ -611,6 +654,8 @@ Resources:
         Variables:
           contact_table_name: !Ref contactDetailsTable
           transcript_seg_table_name: !Ref transcriptSegmentsTable
+          transcript_seg_to_customer_table_name: !Ref transcriptSegmentsToCustomerTable
+          METRICS: true
       Code:
         S3Bucket: !Ref existingS3BucketName
         S3Key: !Join ["", [!Ref existingS3Path, 'process_contact.zip']]
