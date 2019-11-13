@@ -42,8 +42,8 @@ Getting started with this project is easy. The most basic use case of capturing 
 
 ### Easy Setup
 - Clone the github repo into your account.
-- Create an S3 bucket and upload the `deployment/` folder into it
-    - Open the `cloudformation.yaml` file and copy the S3 url on it's detail page
+- Create an S3 bucket and create a new folder “deployment” and upload the deployment/ folder into it
+    - Open the `cloudformation.template` file and copy the S3 url on it's detail page
 - Go to CloudFormation and select 'Create Stack'.
     - Create the stack from an S3 url and paste the url from the cloudformation.yaml file
     - Fill in the parameters for the stack. The existingS3BucketName and existingS3Path should be the ones created above that contain all the deployment related code.
