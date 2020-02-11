@@ -612,7 +612,7 @@ Resources:
         Amazon Connect Contact Flow.
       Handler: "kvs_trigger.handler"
       Role: !GetAtt AIPoweredSpeechAnalyticsKvsTriggerRole.Arn
-      Runtime: "nodejs8.10"
+      Runtime: "nodejs12.x"
       MemorySize: 128
       Timeout: 30
       Environment:
@@ -629,7 +629,7 @@ Resources:
         AWS Lambda Function that will be triggered when the call starts so that we have the initial contact details which can later add to when we have the transcript, and audio file location.
       Handler: "contact_init.handler"
       Role: !GetAtt AIPoweredSpeechAnalyticsSTSTokenLambdaIAMRole.Arn
-      Runtime: "nodejs8.10"
+      Runtime: "nodejs12.x"
       MemorySize: 128
       Timeout: 30
       Environment:
@@ -647,7 +647,7 @@ Resources:
         AWS Lambda Function that will be triggered when the wav call recording file is placed in S3. This function will collect all the transcript segments, and the audio file location and update the contact db.
       Handler: "process_contact.handler"
       Role: !GetAtt AIPoweredSpeechAnalyticsProcessContactRole.Arn
-      Runtime: "nodejs8.10"
+      Runtime: "nodejs12.x"
       MemorySize: 256
       Timeout: 120
       Environment:
@@ -667,7 +667,7 @@ Resources:
         AWS Lambda Function that will create the initial sample contact flow and upload it to the S3 bucket
       Handler: "create_contact_flow.handler"
       Role: !GetAtt AIPoweredSpeechAnalyticsContactFlowCreatorRole.Arn
-      Runtime: "nodejs8.10"
+      Runtime: "nodejs12.x"
       MemorySize: 256
       Timeout: 120
       Code:

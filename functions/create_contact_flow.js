@@ -13,10 +13,6 @@
  *  IN THE SOFTWARE.                                                                                                  *
  **********************************************************************************************************************/
 'use strict';
-const metricsHelper = require('./metricsHelper.js');
-const metrics = process.env.METRICS;
-const nodeUuid = require('uuid');
-const uuid = nodeUuid.v4();
 
 function createContactFlow(properties, callback) {
     if (!properties.bucketName)
@@ -43,7 +39,6 @@ createContactFlow.handler = function(event, context) {
 
     createContactFlow(event.ResourceProperties, function(err, result) {
         var status = err ? 'FAILED' : 'SUCCESS';
-        sendAnonymousData(status);
         return sendResponse(event, context, status, result, err);
     });
 };
@@ -138,31 +133,4 @@ function usageExit() {
     var path = require('path');
     console.error('Usage: '  + path.basename(process.argv[1]) + ' json-array');
     process.exit(1);
-}
-
-// This function sends anonymous usage data, if enabled
-function sendAnonymousData(status) {
-    var event = {};
-    event["Data"] = {};
-    event["Data"]["CreateContactFlowResult"] = status;
-    event["UUID"] = uuid;
-    event["Solution"] = "SO0064";
-    var time = new Date();
-    event["TimeStamp"] = time.toString();
-    if (metrics == 'Yes') {
-        let _metricsHelper = new metricsHelper();
-        _metricsHelper.sendAnonymousMetric(event,function(err, data) {
-            if (err) {
-                console.log('Error sending anonymous metric:');
-                console.log(err);
-            }
-            else {
-                console.log('Success sending anonymous metric:');
-                console.log(data);
-            }
-        });
-    }
-    else {
-        console.log('Customer has elected not to send anonymous metrics');
-    }
 }

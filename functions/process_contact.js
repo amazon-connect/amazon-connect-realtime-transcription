@@ -23,10 +23,6 @@ const path = require("path");
 const transcript_seg_table_name = process.env.transcript_seg_table_name;
 const transcript_seg_to_customer_table_name = process.env.transcript_seg_to_customer_table_name;
 const contact_table_name = process.env.contact_table_name;
-const metricsHelper = require('./metricsHelper.js');
-const metrics = process.env.METRICS;
-const nodeUuid = require('uuid');
-const uuid = nodeUuid.v4();
 
 exports.handler = (event, context, callback) => {
     console.log('Received event::', JSON.stringify(event, null, 2));
@@ -72,10 +68,8 @@ exports.handler = (event, context, callback) => {
                 var docClient = new aws.DynamoDB.DocumentClient();
                 docClient.update(paramsUpdate, function (err, data) {
                     if (err) {
-                        sendAnonymousData("ERROR");
                         console.log("Unable to update item. Error: ", JSON.stringify(err, null, 2));
                     } else {
-                        sendAnonymousData("SUCCESS");
                         console.log("Updated item succeeded: ", JSON.stringify(data, null, 2));
                     }
 
@@ -131,31 +125,4 @@ function getTranscript(contactId, tableName) {
 
         });
     });
-}
-
-// This function sends anonymous usage data, if enabled
-function sendAnonymousData(status) {
-    var event = {};
-    event["Data"] = {};
-    event["Data"]["ProcessContactResult"] = status;
-    event["UUID"] = uuid;
-    event["Solution"] = "SO0064";
-    var time = new Date();
-    event["TimeStamp"] = time.toString();
-    if (metrics == 'Yes') {
-        let _metricsHelper = new metricsHelper();
-        _metricsHelper.sendAnonymousMetric(event,function(err, data) {
-            if (err) {
-                console.log('Error sending anonymous metric:');
-                console.log(err);
-            }
-            else {
-                console.log('Success sending anonymous metric:');
-                console.log(data);
-            }
-        });
-    }
-    else {
-        console.log('Customer has elected not to send anonymous metrics');
-    }
 }

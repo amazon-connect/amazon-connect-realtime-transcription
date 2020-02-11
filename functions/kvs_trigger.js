@@ -16,10 +16,6 @@
 'use strict';
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda();
-const metricsHelper = require('./metricsHelper.js');
-const metrics = process.env.METRICS;
-const nodeUuid = require('uuid');
-const uuid = nodeUuid.v4();
 
 exports.handler = (event, context, callback) => {
 
@@ -60,11 +56,9 @@ exports.handler = (event, context, callback) => {
 
     lambda.invokeAsync(params, function(err, data) {
         if (err) {
-            sendAnonymousData("ERROR");
             throw (err);
         } else {
             console.log(JSON.stringify(data));
-            sendAnonymousData("SUCCESS");
             if (callback)
                 callback(null, buildResponse());
             else
@@ -80,31 +74,4 @@ function buildResponse() {
         // we always return "Success" for now
         lambdaResult:"Success"
     };
-}
-
-// This function sends anonymous usage data, if enabled
-function sendAnonymousData(response) {
-    var event = {};
-    event["Data"] = {};
-    event["Data"]["KvsTriggerLambdaResult"] = response;
-    event["UUID"] = uuid;
-    event["Solution"] = "SO0064";
-    var time = new Date();
-    event["TimeStamp"] = time.toString();
-    if (metrics == 'Yes') {
-        let _metricsHelper = new metricsHelper();
-        _metricsHelper.sendAnonymousMetric(event,function(err, data) {
-            if (err) {
-                console.log('Error sending anonymous metric:');
-                console.log(err);
-            }
-            else {
-                console.log('Success sending anonymous metric:');
-                console.log(data);
-            }
-        });
-    }
-    else {
-        console.log('Customer has elected not to send anonymous metrics');
-    }
 }
