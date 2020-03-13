@@ -7,11 +7,9 @@ import com.amazonaws.kinesisvideo.parser.mkv.Frame;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvDataElement;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElement;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
-import com.amazonaws.kinesisvideo.parser.mkv.MkvStartMasterElement;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvValue;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
 import com.amazonaws.kinesisvideo.parser.utilities.FragmentMetadataVisitor;
-import com.amazonaws.kinesisvideo.parser.utilities.MkvTag;
 import com.amazonaws.kinesisvideo.parser.utilities.MkvTrackMetadata;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesisvideo.AmazonKinesisVideo;
@@ -72,23 +70,6 @@ public final class KVSUtils {
     private static final Logger logger = LoggerFactory.getLogger(KVSUtils.class);
 
     /**
-     * Iterates thorugh all the tags and retrieves the Tag value for "ContactId" tag
-     *
-     * @param tagProcessor
-     * @return
-     */
-    private static String getTagFromStream(FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor, final String tagName) {
-        Iterator iter = tagProcessor.getTags().iterator();
-        while (iter.hasNext()) {
-            MkvTag tag = (MkvTag) iter.next();
-            if (tagName.equals(tag.getTagName())) {
-                return tag.getTagValue();
-            }
-        }
-        return null;
-    }
-
-    /**
      * Fetches the next ByteBuffer of size 1024 bytes from the KVS stream by parsing the frame from the MkvElement
      * Each frame has a ByteBuffer having size 1024
      *
@@ -101,33 +82,20 @@ public final class KVSUtils {
      */
     public static ByteBuffer getByteBufferFromStream(StreamingMkvReader streamingMkvReader,
                                                      FragmentMetadataVisitor fragmentVisitor,
-                                                     FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor,
+                                                     KVSContactTagProcessor tagProcessor,
                                                      String contactId, String track) throws MkvElementVisitException {
         while (streamingMkvReader.mightHaveNext()) {
             Optional<MkvElement> mkvElementOptional = streamingMkvReader.nextIfAvailable();
             if (mkvElementOptional.isPresent()) {
+                if (tagProcessor.shouldStopProcessing()) {
+                    return ByteBuffer.allocate(0);
+                }
                 MkvElement mkvElement = mkvElementOptional.get();
                 mkvElement.accept(fragmentVisitor);
-                // Validate that we are reading data only for the expected contactId at start of every mkv master element
-                if (MkvTypeInfos.EBML.equals(mkvElement.getElementMetaData().getTypeInfo())) {
-                    if (mkvElement instanceof MkvStartMasterElement) {
-                        String contactIdFromStream = getTagFromStream(tagProcessor, "ContactId");
-                        if (contactIdFromStream != null && !contactIdFromStream.equals(contactId)) {
-                            //expected Connect ContactId does not match the actual ContactId. End the streaming by
-                            //returning an empty ByteBuffer
-                            return ByteBuffer.allocate(0);
-                        }
-                        //tagProcessor.clear();
-                    }
-                } else if (MkvTypeInfos.SIMPLEBLOCK.equals(mkvElement.getElementMetaData().getTypeInfo())) {
+                if (MkvTypeInfos.SIMPLEBLOCK.equals(mkvElement.getElementMetaData().getTypeInfo())) {
                     MkvDataElement dataElement = (MkvDataElement) mkvElement;
                     Frame frame = ((MkvValue<Frame>) dataElement.getValueCopy()).getVal();
                     ByteBuffer audioBuffer = frame.getFrameData();
-
-                    String isStopStreaming = getTagFromStream(tagProcessor, "STOP_STREAMING");
-                    if ("true".equals(isStopStreaming)) {
-                        return ByteBuffer.allocate(0);
-                    }
 
                     long trackNumber = frame.getTrackNumber();
                     MkvTrackMetadata metadata = fragmentVisitor.getMkvTrackMetadata(trackNumber);
@@ -160,7 +128,7 @@ public final class KVSUtils {
      */
     public static ByteBuffer getByteBufferFromStream(StreamingMkvReader streamingMkvReader,
                                                      FragmentMetadataVisitor fragmentVisitor,
-                                                     FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor,
+                                                     KVSContactTagProcessor tagProcessor,
                                                      String contactId,
                                                      int chunkSizeInKB,
                                                      String track) throws MkvElementVisitException {

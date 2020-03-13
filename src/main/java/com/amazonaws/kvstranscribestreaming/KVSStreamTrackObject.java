@@ -10,14 +10,14 @@ import java.nio.file.Path;
 public class KVSStreamTrackObject {
     private InputStream inputStream;
     private StreamingMkvReader streamingMkvReader;
-    private FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor;
+    private KVSContactTagProcessor tagProcessor;
     private FragmentMetadataVisitor fragmentVisitor;
     private Path saveAudioFilePath;
     private FileOutputStream outputStream;
     private String trackName;
 
     public KVSStreamTrackObject(InputStream inputStream, StreamingMkvReader streamingMkvReader,
-                                FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor,
+                                KVSContactTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor,
                                 Path saveAudioFilePath, FileOutputStream outputStream, String trackName) {
         this.inputStream = inputStream;
         this.streamingMkvReader = streamingMkvReader;
@@ -36,7 +36,7 @@ public class KVSStreamTrackObject {
         return streamingMkvReader;
     }
 
-    public FragmentMetadataVisitor.BasicMkvTagProcessor getTagProcessor() {
+    public KVSContactTagProcessor getTagProcessor() {
         return tagProcessor;
     }
 

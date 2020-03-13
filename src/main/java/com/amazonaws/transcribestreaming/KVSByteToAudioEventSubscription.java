@@ -2,6 +2,7 @@ package com.amazonaws.transcribestreaming;
 
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
 import com.amazonaws.kinesisvideo.parser.utilities.FragmentMetadataVisitor;
+import com.amazonaws.kvstranscribestreaming.KVSContactTagProcessor;
 import com.amazonaws.kvstranscribestreaming.KVSUtils;
 import org.apache.commons.lang3.Validate;
 import org.reactivestreams.Subscriber;
@@ -49,12 +50,12 @@ public class KVSByteToAudioEventSubscription implements Subscription {
     private final StreamingMkvReader streamingMkvReader;
     private String contactId;
     private OutputStream outputStream;
-    private final FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor;
+    private final KVSContactTagProcessor tagProcessor;
     private final FragmentMetadataVisitor fragmentVisitor;
     private final String track;
 
     public KVSByteToAudioEventSubscription(Subscriber<? super AudioStream> s, StreamingMkvReader streamingMkvReader,
-                                           String contactId, OutputStream outputStream, FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor,
+                                           String contactId, OutputStream outputStream, KVSContactTagProcessor tagProcessor,
                                            FragmentMetadataVisitor fragmentVisitor, String track) {
         this.subscriber = Validate.notNull(s);
         this.streamingMkvReader = Validate.notNull(streamingMkvReader);

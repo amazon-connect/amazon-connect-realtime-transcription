@@ -299,7 +299,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
         InputStream kvsInputStream = KVSUtils.getInputStreamFromKVS(streamName, REGION, startFragmentNum, getAWSCredentials(), START_SELECTOR_TYPE);
         StreamingMkvReader streamingMkvReader = StreamingMkvReader.createDefault(new InputStreamParserByteSource(kvsInputStream));
 
-        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor = new FragmentMetadataVisitor.BasicMkvTagProcessor();
+        KVSContactTagProcessor tagProcessor = new KVSContactTagProcessor(contactId);
         FragmentMetadataVisitor fragmentVisitor = FragmentMetadataVisitor.create(Optional.of(tagProcessor));
 
         String fileName = String.format("%s_%s_%s.raw", contactId, DATE_FORMAT.format(new Date()), trackName);
@@ -391,12 +391,12 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
         private final StreamingMkvReader streamingMkvReader;
         private String contactId;
         private OutputStream outputStream;
-        private FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor;
+        private KVSContactTagProcessor tagProcessor;
         private FragmentMetadataVisitor fragmentVisitor;
         private String track;
 
         private KVSAudioStreamPublisher(StreamingMkvReader streamingMkvReader, String contactId, OutputStream outputStream,
-                                        FragmentMetadataVisitor.BasicMkvTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor,
+                                        KVSContactTagProcessor tagProcessor, FragmentMetadataVisitor fragmentVisitor,
                                         String track) {
             this.streamingMkvReader = streamingMkvReader;
             this.contactId = contactId;
