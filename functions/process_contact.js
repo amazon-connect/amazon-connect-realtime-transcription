@@ -1,5 +1,5 @@
 /**********************************************************************************************************************
- *  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved                                            *
+ *  Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved                                            *
  *                                                                                                                    *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated      *
  *  documentation files (the "Software"), to deal in the Software without restriction, including without limitation   *
@@ -24,6 +24,13 @@ const transcript_seg_table_name = process.env.transcript_seg_table_name;
 const transcript_seg_to_customer_table_name = process.env.transcript_seg_to_customer_table_name;
 const contact_table_name = process.env.contact_table_name;
 
+const combinedBucket = process.env.combined_audio_bucket;
+const lambdaFunc = process.env.merge_audio_lambda;
+
+// S3 to check the two audio files
+var s3bucket = new aws.S3();
+
+
 exports.handler = (event, context, callback) => {
     console.log('Received event::', JSON.stringify(event, null, 2));
 
@@ -40,29 +47,63 @@ exports.handler = (event, context, callback) => {
     var contactId = file.split('_')[0];
     console.log(`Received event for this contact ID: ${contactId}`);
 
+    //Determine if File is AUDIO_FROM_CUSTOMER or TO_CUSTOMER
+    let strAudioFromCustomer = "AUDIO_FROM_CUSTOMER";
+    let strAudioToCustomer = "AUDIO_TO_CUSTOMER";
+
+    let audioFromCustomer = key.includes(strAudioFromCustomer);
+    let audioToCustomer = key.includes(strAudioToCustomer);
+    
+    if (audioFromCustomer){
+        console.log("GOT AUDIO FROM CUSTOMER");
+    }
+    if (audioToCustomer){
+        console.log("GOT AUDIO TO CUSTOMER");
+    } 
+
+    //Call Function to Combine Audio
+    combineAudio( bucket,contactId,lambdaFunc, combinedBucket );
+
     getTranscript(contactId, transcript_seg_table_name)
         .then(result1 => {
             getTranscript(contactId, transcript_seg_to_customer_table_name)
             .then(result2 => {
                 var contactTranscriptFromCustomer = result1;
                 var contactTranscriptToCustomer = result2;
-
+                //Checking if audioFromCustomer and setting up parameters for DynamoDB update 
+                if (audioFromCustomer){
                 //set up the database query to be used to update the customer information record in DynamoDB
                 var paramsUpdate = {
-                    //DynamoDB Table Name.  Replace with your table name
                     TableName: contact_table_name,
                     Key: {
                         "contactId": contactId
                     },
-
+                    
                     ExpressionAttributeValues: {
                         ":var1": contactTranscriptFromCustomer,
-                        ":var2": contactTranscriptToCustomer,
-                        ":var3": recordingURL
+                        ":var2": recordingURL
                     },
-
-                    UpdateExpression: "SET contactTranscriptFromCustomer = :var1, contactTranscriptToCustomer = :var2, recordingURL = :var3"
+                    //Updating audioFromCustomer field in DynamoDB with recording URL
+                    UpdateExpression: "SET contactTranscriptFromCustomer = :var1, audioFromCustomer = :var2"
                 };
+            //Checking if audioToCustomer and setting up parameters for DynamoDB update 
+            } else if (audioToCustomer) {
+                //set up the database query to be used to update the customer information record in DynamoDB
+                var paramsUpdate = {
+                    TableName: contact_table_name,
+                    Key: {
+                        "contactId": contactId
+                    },
+                     
+                    ExpressionAttributeValues: {
+                        ":var1": contactTranscriptToCustomer,
+                        ":var2": recordingURL
+                    },
+                    //Updating audioToCustomer field in DynamoDB with recording URL
+                    UpdateExpression: "SET contactTranscriptToCustomer = :var1, audioToCustomer = :var2"
+                };
+                
+                }
 
                 //update the customer record in the database with the new call information using the paramsUpdate query we setup above:
                 var docClient = new aws.DynamoDB.DocumentClient();
@@ -74,10 +115,8 @@ exports.handler = (event, context, callback) => {
                     }
 
                 });
-
-
                 callback(null, "Success!");
-            })
+            });
         });
 
 };
@@ -124,5 +163,73 @@ function getTranscript(contactId, tableName) {
             }
 
         });
+    });
+}
+
+// ---------------------------------------------------------------------------
+
+function combineAudio(bucketName, contactIdent, lambdaFunc, combinedBucket)
+{
+        const lambda = new aws.Lambda();
+        var bucketParams = {
+        	Bucket: bucketName,
+        	Delimiter: '/',
+        	Prefix: 'recordings/' + contactIdent
+        };
+
+    
+        
+        // List files in starting with a specific Contact ID
+        s3bucket.listObjects(bucketParams, function (err, data){
+            if (err) {console.log(err,err.stack);}
+            else {
+                // Loop thru to find the To and From files
+                for (let index = 0; index < data['Contents'].length; index++)
+                {
+            		//console.log(data['Contents'][index]['Key']);
+                    var filename = data['Contents'][index]['Key'];
+                    if (filename.includes('TO')) {
+                        var fileTo = filename;
+                    }
+                    if (filename.includes('FROM')){
+                            var fileFrom = filename;
+                    }
+            	}
+            	// if both files are found proceed to call the merge audio streams
+                if ( fileTo && fileFrom) {
+                    console.log("Got both files invoke Lambda");
+                    var dates = new Date();
+                    var datesString = dates.toISOString();
+                    var lambdaParams = {
+                        FunctionName: lambdaFunc,
+                        InvocationType: "Event",
+                        Payload:JSON.stringify({
+                            "sources": [{
+                                "Bucket": bucketName,
+                                "Key": fileTo
+                            },
+                            {
+                                "Bucket": bucketName,
+                                "Key": fileFrom
+                            }],
+                            "target": {
+                                "Bucket": combinedBucket,
+                                "Key": contactIdent + "_" + datesString + "_COMBINED_AUDIO.wav"
+                            }
+                        })
+                    };
+                    console.log(lambdaParams);
+                    // Invoke merge audio files
+                    lambda.invoke(lambdaParams, function(error, data){
+                            console.log("error value" + error);
+                            if (error) {console.log("Error invoking Lambda");}
+                                else {console.log(data);}
+                    });
+                }
+                else {
+                    // If just one file is found, wait for the other file.
+                    console.log("Waiting for the other file");
+                }
+            }
     });
 }
