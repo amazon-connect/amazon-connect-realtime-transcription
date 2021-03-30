@@ -1,5 +1,10 @@
 apply plugin: 'java'
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
 repositories {
     mavenCentral()
 }
@@ -8,18 +13,18 @@ dependencies {
     compile fileTree(dir: 'jars', include: '*.jar')
     compile group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.2'
     compile(
-            'software.amazon.awssdk:transcribestreaming:2.5.0',
+            'software.amazon.awssdk:transcribestreaming:2.16.30',
 
-            'com.amazonaws:aws-java-sdk-dynamodb:1.11.475',
-            'com.amazonaws:aws-java-sdk-kinesisvideo:1.11.475',
-            'com.amazonaws:aws-lambda-java-core:1.2.0',
-            'com.amazonaws:aws-lambda-java-events:1.2.0',
-            'com.amazonaws:aws-java-sdk-cloudwatch:1.11.480',
+            'com.amazonaws:aws-java-sdk-dynamodb:1.11.987',
+            'com.amazonaws:aws-java-sdk-kinesisvideo:1.11.987',
+            'com.amazonaws:aws-lambda-java-core:1.2.1',
+            'com.amazonaws:aws-lambda-java-events:3.8.0',
+            'com.amazonaws:aws-java-sdk-cloudwatch:1.11.987',
             'org.slf4j:slf4j-api:1.7.24',
             'org.slf4j:slf4j-log4j12:1.7.24',
 
             // need this for our async clients
-            'software.amazon.awssdk:netty-nio-client:2.2.0',
+            'software.amazon.awssdk:netty-nio-client:2.16.30',
 
             // need this for logging
             'org.apache.commons:commons-lang3:3.6'

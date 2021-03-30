@@ -100,7 +100,7 @@ public class TranscribedSegmentWriter {
                         // LoggedOn is an ISO-8601 string representation of when the entry was created
                         .withString("LoggedOn", now.toString())
                         // expire after a week by default
-                        .withDouble("ExpiresAfter", now.plusMillis(7 * 24 * 3600).toEpochMilli());
+                        .withDouble("ExpiresAfter", now.plusSeconds(7 * 24 * 3600).toEpochMilli() / 1000);
 
                 if (consoleLogTranscriptFlag) {
                     logger.info(String.format("Thread %s %d: [%s, %s] - %s",
