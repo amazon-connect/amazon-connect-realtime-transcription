@@ -80,6 +80,8 @@ public final class AudioUtils {
         AudioInputStream source = new AudioInputStream(Files.newInputStream(Paths.get(audioFilePath)),
                 new AudioFormat(8000, 16, 1, true, false), -1); // 8KHz, 16 bit, 1 channel, signed, little-endian
         AudioSystem.write(source, AudioFileFormat.Type.WAVE, outputFile);
+
+        source.close();
         return outputFile;
     }
 

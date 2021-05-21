@@ -37,12 +37,6 @@ public class KVSContactTagProcessor implements FragmentMetadataVisitor.MkvTagPro
                 sameContact = false;
             }
         }
-        if ("STOP_STREAMING".equals(mkvTag.getTagName())) {
-            if ("true".equals(mkvTag.getTagValue())) {
-                logger.info("STOP_STREAMING tag detected, will stop streaming");
-                stopStreaming = true;
-            }
-        }
     }
 
     public boolean shouldStopProcessing() {
