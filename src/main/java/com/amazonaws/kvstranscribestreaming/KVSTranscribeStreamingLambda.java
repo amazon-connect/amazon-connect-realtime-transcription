@@ -284,8 +284,8 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
         //Delete raw files from the lambda function
         File fileToDelete = new File(kvsStreamTrackObject.getSaveAudioFilePath().toString());
         if (fileToDelete != null) {
-            fileToDelete.delete();
-            logger.info(String.format("contact id: %s raw file deleted", contactId));
+            Boolean deletionResult = fileToDelete.delete();
+            logger.info("Raw file for contactId {} deletion result: {}", contactId, deletionResult);
         }
     }
 
