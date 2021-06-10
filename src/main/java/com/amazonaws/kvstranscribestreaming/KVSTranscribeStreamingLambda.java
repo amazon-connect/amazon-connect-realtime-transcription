@@ -281,7 +281,12 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
         } else {
             logger.info("Skipping upload to S3.  saveCallRecording was disabled or audio file has 0 bytes: " + kvsStreamTrackObject.getSaveAudioFilePath().toString());
         }
-
+        //Delete raw files from the lambda function
+        File fileToDelete = new File(kvsStreamTrackObject.getSaveAudioFilePath().toString());
+        if (fileToDelete != null) {
+            logger.info("Raw file deleted");
+            fileToDelete.delete();
+        }
     }
 
     /**
