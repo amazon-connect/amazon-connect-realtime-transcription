@@ -1,3 +1,13 @@
+## [1.0.1] - 2022-01-27
+### Added
+- Lambda zip files restored in deployment/* folder 
+
+### Changed
+- amazon-kinesis-video-streams-parser-library version to 1.2.1 
+
+### Removed
+- .DS_Store 
+
 ## [1.0.0] - 2021-12-17
 ### Added
 - CHANGELOG.md

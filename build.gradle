@@ -12,7 +12,7 @@ repositories {
 dependencies {
     compile fileTree(dir: 'jars', include: '*.jar')
     compile group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.2'
-    compile group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.1.0'
+    compile group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.2.1'
     compile(
             'software.amazon.awssdk:transcribestreaming:2.16.30',
 
