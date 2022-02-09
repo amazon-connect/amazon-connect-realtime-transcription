@@ -557,7 +557,7 @@ Resources:
         Amazon Connect Contact Flow.
       Handler: "kvs_trigger.handler"
       Role: !GetAtt KvsTriggerRole.Arn
-      Runtime: "nodejs12.x"
+      Runtime: "nodejs14.x"
       MemorySize: 128
       Timeout: 30
       Environment:
@@ -606,7 +606,7 @@ Resources:
         AWS Lambda Function that will be triggered when the wav call recording file is placed in S3. This function will collect all the transcript segments, and the audio file location and update the contact db.
       Handler: "process_contact.handler"
       Role: !GetAtt ProcessContactRole.Arn
-      Runtime: "nodejs12.x"
+      Runtime: "nodejs14.x"
       MemorySize: 256
       Timeout: 120
       Environment:
