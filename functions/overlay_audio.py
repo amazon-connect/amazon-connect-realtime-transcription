@@ -31,7 +31,8 @@ def handle_dynamo(event, contact_Id):
 
     response = table.get_item(
        Key={
-            'contactId': contact_Id
+            'pk': 'CONNECT_TRANSCRIPTION#!#' + contact_Id,
+            'sk': 'TRANSCRIPTION_SUMMARY'
         }
     )
     item = response['Item']
@@ -44,7 +45,10 @@ def handle_dynamo(event, contact_Id):
     if status == "":
         print('Status is blank, updating with processing')
         table.update_item(
-            Key={'contactId': contact_Id},
+            Key={
+                'pk': 'CONNECT_TRANSCRIPTION#!#' + contact_Id,
+                'sk': 'TRANSCRIPTION_SUMMARY'
+                },
              UpdateExpression="set mergeStatus=:p",  
              ExpressionAttributeValues={
                 ':p': 'Processing'
@@ -55,7 +59,10 @@ def handle_dynamo(event, contact_Id):
         print('merge_audio is complete, update dynamo')
         
         table.update_item(
-            Key={'contactId': contact_Id},
+            Key={
+                'pk': 'CONNECT_TRANSCRIPTION#!#' + contact_Id,
+                'sk': 'TRANSCRIPTION_SUMMARY'
+                },
              UpdateExpression="set mergeStatus=:p,combinedAudio=:a",
              ExpressionAttributeValues={
                 ':p': status,

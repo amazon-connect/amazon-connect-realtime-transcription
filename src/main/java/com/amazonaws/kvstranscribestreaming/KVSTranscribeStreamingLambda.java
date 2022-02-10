@@ -71,11 +71,11 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
     private static final boolean RECORDINGS_PUBLIC_READ_ACL = Boolean.parseBoolean(System.getenv("RECORDINGS_PUBLIC_READ_ACL"));
     private static final String START_SELECTOR_TYPE = System.getenv("START_SELECTOR_TYPE");
     private static final String TABLE_CALLER_TRANSCRIPT = System.getenv("TABLE_CALLER_TRANSCRIPT");
-    private static final String TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER = System.getenv("TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER");
 
     private static final Logger logger = LoggerFactory.getLogger(KVSTranscribeStreamingLambda.class);
     public static final MetricsUtil metricsUtil = new MetricsUtil(AmazonCloudWatchClientBuilder.defaultClient());
     private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+    
 
 
     // SegmentWriter saves Transcription segments to DynamoDB
@@ -102,9 +102,9 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
             // create a SegmentWriter to be able to save off transcription results
             AmazonDynamoDBClientBuilder builder = AmazonDynamoDBClientBuilder.standard();
             builder.setRegion(REGION.getName());
-            fromCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()),
+            fromCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()), "FROM_CUSTOMER",
                     CONSOLE_LOG_TRANSCRIPT_FLAG);
-            toCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()),
+            toCustomerSegmentWriter = new TranscribedSegmentWriter(request.getConnectContactId(), new DynamoDB(builder.build()), "TO_CUSTOMER",
                     CONSOLE_LOG_TRANSCRIPT_FLAG);
 
             // If an inputFileName has been provided in the request, stream audio from the file to Transcribe
@@ -167,7 +167,7 @@ public class KVSTranscribeStreamingLambda implements RequestHandler<Transcriptio
 
                 if (kvsStreamTrackObjectToCustomer != null) {
                     toCustomerResult = getStartStreamingTranscriptionFuture(kvsStreamTrackObjectToCustomer,
-                            languageCode, contactId, client, toCustomerSegmentWriter, TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER, KVSUtils.TrackName.AUDIO_TO_CUSTOMER.getName());
+                            languageCode, contactId, client, toCustomerSegmentWriter, TABLE_CALLER_TRANSCRIPT, KVSUtils.TrackName.AUDIO_TO_CUSTOMER.getName());
                 }
 
                 // Synchronous wait for stream to close, and close client connection

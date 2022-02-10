@@ -20,12 +20,12 @@ console.log('Loading function');
 const aws = require('aws-sdk');
 const url = require("url");
 const path = require("path");
-const transcript_seg_table_name = process.env.transcript_seg_table_name;
-const transcript_seg_to_customer_table_name = process.env.transcript_seg_to_customer_table_name;
 const contact_table_name = process.env.contact_table_name;
 
 const combinedBucket = process.env.combined_audio_bucket;
 const lambdaFunc = process.env.merge_audio_lambda;
+
+const dlm = "#!#"
 
 // S3 to check the two audio files
 var s3bucket = new aws.S3();
@@ -64,9 +64,9 @@ exports.handler = (event, context, callback) => {
     //Call Function to Combine Audio
     combineAudio( bucket,contactId,lambdaFunc, combinedBucket );
 
-    getTranscript(contactId, transcript_seg_table_name)
+    getTranscript(contactId, contact_table_name, "FROM_CUSTOMER")
         .then(result1 => {
-            getTranscript(contactId, transcript_seg_to_customer_table_name)
+            getTranscript(contactId, contact_table_name, "TO_CUSTOMER")
             .then(result2 => {
                 var contactTranscriptFromCustomer = result1;
                 var contactTranscriptToCustomer = result2;
@@ -76,7 +76,8 @@ exports.handler = (event, context, callback) => {
                 var paramsUpdate = {
                     TableName: contact_table_name,
                     Key: {
-                        "contactId": contactId
+                        "pk": `CONNECT_TRANSCRIPTION${dlm}${contactId}`,
+                        "sk": `TRANSCRIPTION_SUMMARY`
                     },
                     
                     ExpressionAttributeValues: {
@@ -92,7 +93,8 @@ exports.handler = (event, context, callback) => {
                 var paramsUpdate = {
                     TableName: contact_table_name,
                     Key: {
-                        "contactId": contactId
+                        "pk": `CONNECT_TRANSCRIPTION${dlm}${contactId}`,
+                        "sk": `TRANSCRIPTION_SUMMARY`
                     },
                      
                     ExpressionAttributeValues: {
@@ -121,17 +123,18 @@ exports.handler = (event, context, callback) => {
 
 };
 
-function getTranscript(contactId, tableName) {
+function getTranscript(contactId, tableName, prefix) {
     return new Promise(function (resolve, reject) {
         var docClient = new aws.DynamoDB.DocumentClient();
 
         //set up the database query to be used to lookup customer information from DynamoDB
         var paramsQuery = {
             TableName: tableName,
-            KeyConditionExpression: "ContactId = :varContactId",
+            KeyConditionExpression: `pk = :varPk and begins_with(sk, :varSk)`,
 
             ExpressionAttributeValues: {
-                ":varContactId": contactId
+                ":varPk": `CONNECT_TRANSCRIPTION${dlm}${contactId}`,
+                ":varSk": prefix
             }
         };
 
