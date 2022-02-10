@@ -4,7 +4,7 @@ Description: >
   - Create the basic foundation for streaming customer audio from Amazon Connect by deploying:
   - S3 Bucket for audio files, and the sample contact flow
   - S3 Bucket for storing combined audio files
-  - Dynamo DB tables: transcriptSegments, transcriptSegmentsToCustomer, and contactDetails
+  - Dynamo DB table: contactDetails, which stores a contact details summary, transcript segments from the customer, and transcript segments to the customer 
   - A Lambda that will store the initial contact details in dynamo and trigger Java Lambda to process KVS Stream by passing the stream details to the function
   - A Java Lambda to consume KVS and stream it to Amazon Transcribe, store the segments in DDB and upload the raw audio to S3
   - A Node.js Lambda triggered by S3 once WAV file is uploaded to store the concatenated transcript segments in the contact details table along with the S3 location of the audio file
@@ -25,8 +25,6 @@ Metadata:
         Label:
           default: Amazon DynamoDB Configuration
         Parameters:
-          - transcriptSegmentsTable
-          - transcriptSegmentsToCustomerTable
           - contactDetailsTable
       -
         Label:
@@ -55,10 +53,6 @@ Metadata:
         default: Test Mono Audio Prefix
       s3CombinedBucketName:
         default: Combined recorded audio files Bucket Name
-      transcriptSegmentsTable:
-        default: Transcript Table Name for audio from the customer
-      transcriptSegmentsToCustomerTable:
-        default: Transcript Table Name for audio to the customer
       contactDetailsTable:
         default: Contacts Table Name
 Parameters:
@@ -94,18 +88,10 @@ Parameters:
       Enter the (globally unique) name you would like to use for the Amazon S3 bucket where we will store the combined audio files.
       This template will fail to deploy if the bucket name you chose is currently in use.
     AllowedPattern: '(?=^.{3,63}$)(?!^(\d+\.)+\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$)'
-  transcriptSegmentsTable:
-    Type: String
-    Default:  contactTranscriptSegments
-    Description:  The name of the DynamoDB Table where segments (utterances) from the customer for the caller transcript will be saved (Ensure you do not have a table with this name already).
-  transcriptSegmentsToCustomerTable:
-    Type: String
-    Default:  contactTranscriptSegmentsToCustomer
-    Description:  The name of the DynamoDB Table where segments (utterances) to the customer for the caller transcript will be saved (Ensure you do not have a table with this name already).
   contactDetailsTable:
     Type: String
     Default:  contactDetails
-    Description:  The name of the DynamoDB Table where contact details will be written (Ensure you do not have a table with this name already).    
+    Description:  The name of the DynamoDB Table where contact details will be written (Ensure you do not have a table with this name already). 
 
 Outputs:
   createS3BucketOP:
@@ -192,96 +178,39 @@ Resources:
                 - HEAD
               MaxAge: '3000'
 
-  transcriptSegmentsDDBTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName:  !Ref transcriptSegmentsTable
-      AttributeDefinitions:
-        -
-          AttributeName: "ContactId"
-          AttributeType: "S"
-        -
-          AttributeName: "StartTime"
-          AttributeType: "N"
-      KeySchema:
-        -
-          AttributeName: "ContactId"
-          KeyType: "HASH"
-        -
-          AttributeName: "StartTime"
-          KeyType: "RANGE"
-      # assuming 5 concurrent calls
-      ProvisionedThroughput:
-        ReadCapacityUnits:
-          5
-        WriteCapacityUnits:
-          5
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: True
-      SSESpecification:
-        SSEEnabled: True
-      TimeToLiveSpecification:
-        AttributeName:  "ExpiresAfter"
-        Enabled:  True
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
-
-  transcriptSegmentsToCustomerDDBTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName:  !Ref transcriptSegmentsToCustomerTable
-      AttributeDefinitions:
-        -
-          AttributeName: "ContactId"
-          AttributeType: "S"
-        -
-          AttributeName: "StartTime"
-          AttributeType: "N"
-      KeySchema:
-        -
-          AttributeName: "ContactId"
-          KeyType: "HASH"
-        -
-          AttributeName: "StartTime"
-          KeyType: "RANGE"
-      # assuming 5 concurrent calls
-      ProvisionedThroughput:
-        ReadCapacityUnits:
-          5
-        WriteCapacityUnits:
-          5
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: True
-      SSESpecification:
-        SSEEnabled: True
-      TimeToLiveSpecification:
-        AttributeName:  "ExpiresAfter"
-        Enabled:  True
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
-
   contactDetailsDDBTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName:  !Ref contactDetailsTable
       AttributeDefinitions:
         -
-          AttributeName: "contactId"
+          AttributeName: "pk"
+          AttributeType: "S"
+        -
+          AttributeName: "sk"
           AttributeType: "S"
       KeySchema:
         -
-          AttributeName: "contactId"
+          AttributeName: "pk"
           KeyType: "HASH"
-      # assuming 5 concurrent calls
+        -
+          AttributeName: "sk"
+          KeyType: "RANGE"
+      # assuming 15 concurrent calls
       ProvisionedThroughput:
         ReadCapacityUnits:
-          5
+          15
         WriteCapacityUnits:
-          5
+          15
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: True
       SSESpecification:
         SSEEnabled: True
+      TimeToLiveSpecification:
+        AttributeName:  "ExpiresAfter"
+        Enabled:  True
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
 
   KvsTranscribeRole:
     Type: "AWS::IAM::Role"
@@ -330,8 +259,7 @@ Resources:
                   - "dynamodb:DescribeStream"
                   - "dynamodb:ListStreams"
                 Resource:
-                  - !Sub ${transcriptSegmentsDDBTable.Arn}
-                  - !Sub ${transcriptSegmentsToCustomerDDBTable.Arn}
+                  - !Sub ${contactDetailsDDBTable.Arn}
               -
                 Effect: "Allow"
                 Action:
@@ -440,12 +368,6 @@ Resources:
                 Effect: "Allow"
                 Action:
                   - "dynamodb:Query"
-                Resource:
-                  - !Sub ${transcriptSegmentsDDBTable.Arn}
-                  - !Sub ${transcriptSegmentsToCustomerDDBTable.Arn}
-              -
-                Effect: "Allow"
-                Action:
                   - "dynamodb:UpdateItem"
                 Resource:
                   - !Sub ${contactDetailsDDBTable.Arn}
@@ -537,8 +459,7 @@ Resources:
           RECORDINGS_BUCKET_NAME: !Ref s3BucketName
           RECORDINGS_KEY_PREFIX: !Ref audioFilePrefix
           INPUT_KEY_PREFIX: !Ref rawAudioUploadPrefix
-          TABLE_CALLER_TRANSCRIPT: !Ref transcriptSegmentsTable
-          TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER: !Ref transcriptSegmentsToCustomerTable
+          TABLE_CALLER_TRANSCRIPT: !Ref contactDetailsTable
           RECORDINGS_PUBLIC_READ_ACL: "FALSE"
           CONSOLE_LOG_TRANSCRIPT_FLAG: "TRUE"
           LOGGING_LEVEL: "FINE"
@@ -557,7 +478,7 @@ Resources:
         Amazon Connect Contact Flow.
       Handler: "kvs_trigger.handler"
       Role: !GetAtt KvsTriggerRole.Arn
-      Runtime: "nodejs12.x"
+      Runtime: "nodejs14.x"
       MemorySize: 128
       Timeout: 30
       Environment:
@@ -593,7 +514,7 @@ Resources:
       Timeout: 120
       Environment:
         Variables:
-          contactDetailsTableName: !Ref contactDetailsTable
+          contactDetailsTableName: !Ref contactDetailsDDBTable
       Code:
         S3Bucket: !Ref existingS3BucketName
         S3Key: !Join ["", [!Ref existingS3Path, 'overlay_audio.zip']]
@@ -606,14 +527,12 @@ Resources:
         AWS Lambda Function that will be triggered when the wav call recording file is placed in S3. This function will collect all the transcript segments, and the audio file location and update the contact db.
       Handler: "process_contact.handler"
       Role: !GetAtt ProcessContactRole.Arn
-      Runtime: "nodejs12.x"
+      Runtime: "nodejs14.x"
       MemorySize: 256
       Timeout: 120
       Environment:
         Variables:
-          contact_table_name: !Ref contactDetailsTable
-          transcript_seg_table_name: !Ref transcriptSegmentsTable
-          transcript_seg_to_customer_table_name: !Ref transcriptSegmentsToCustomerTable
+          contact_table_name: !Ref contactDetailsDDBTable
           combined_audio_bucket: !Ref createCombinedS3Bucket
           merge_audio_lambda: !Ref overlayaudio
           METRICS: true

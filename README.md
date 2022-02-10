@@ -31,16 +31,15 @@ In the diagram above, once a call is connected to Amazon Connect:
         - key: `streamAudioFromCustomer`, value `true` or `false`
         - key: `streamAudioToCustomer`, value `true` or `false`
 - (Step 3) Amazon Connect Contact Flow invokes the kvsConsumerTrigger function with all the Contact Attributes set in the previous step.
-- (Step 4) The kvsConsumerTrigger function will write the ContactID, CustomerPhoneNumber, Date, and Time to the DynamoDB table ContactDetails
+- (Step 4) The kvsConsumerTrigger function will write the ContactID, CustomerPhoneNumber, Date, and Time to the DynamoDB table contactDetails using pk as the partition key, with a value of "CONNECT_TRANSCRIPTION#!#*contactId*", and sk as the sort key, with a value of "TRANSCRIPTION_SUMMARY"
 - (Step 5) The kvsConsumerTrigger invokes the kvsTranscriber function passing it all the attributes needed to start consuming the Kinesis Video Stream (call audio). The Contact Flow will continue to execute while the kvsTranscriber Lambda function processes the audio stream. The function will process audio for up to 15 minutes (Lambda limit) or until the call is disconnected.
 - (Step 6) The kvsTranscriber function will send the audio to Amazon Transcribe to transcribe the audio from speech to text. The Kinesis Video Stream has two channels one for Audio to Customer and one for Audio from Customer. Each audio channel is transcribed separately.
-- (Step 7) The kvsTranscriber function will write the transcribed text to two different DynamoDB tables one for audio from customer, transcriptSegments, and one for audio to customer, transcriptSegmentsToCustomer.
+- (Step 7) The kvsTranscriber function will write the transcribed text to the DynamoDB table contactDetails for both audio from customer and audio to customer using pk as the partition key, with a value of "CONNECT_TRANSCRIPTION#!#*contactId*", and sk as the sort key, with a value of "FROM_CUSTOMER#!#*startTime*" or "TO_CUSTOMER#!#*startTime*", respectively.
 - (Step 8) The kvsTranscriber function writes two audio files AUDIO_FROM_CUSTOMER.wav and AUDIO_TO_CUSTOMER.wav to the designated S3 bucket in the CloudFormation template with ContactID, date and time prepended to the filenames.
 - (Step 9) The S3 bucket has a trigger that looks for files to be written with a .wav extension and invokes the Lambda processContactSummary
-- (Step 10) The processContactSummary queries the contactTranscriptSegments tables to retrieve the transcript.
-- (Step 11) The processContactSummary then updates the contactDetails table with the Contacts Transcripts using the ContactID as the Key.
-- (Step 12) The processContactSummary invokes the overlay-audio Lambda that takes the two audio file names, FROM_CUSTOMER and TO_CUSTOMER, and combines them.
-- (Step 13)	The processContactSummary writes the combined audio file to the combined audio S3 bucket.
+- (Step 10) The processContactSummary queries the contactDetails table to retrieve the transcript, then updates the contactDetails table with the concatenated transcripts using pk as the partition key, with a value of "CONNECT_TRANSCRIPTION#!#*contactId*", and sk as the sort key, with a value of "TRANSCRIPTION_SUMMARY".
+- (Step 11) The processContactSummary invokes the overlay-audio Lambda that takes the two audio file names, FROM_CUSTOMER and TO_CUSTOMER, and combines them.
+- (Step 12)	The processContactSummary writes the combined audio file to the combined audio S3 bucket.
 
 The Lambda code expects the Kinesis Video Stream details provided by the Amazon Connect Contact Flow as well as the Amazon Connect Contact Id. The handler function of the Lambda is present in `KVSTranscribeStreamingLambda.java` and it uses the GetMedia API of Kinesis Video Stream to fetch the InputStream of the customer audio call. The InputStream is processed using the AWS Kinesis Video Streams provided Parser Library. If the `transcriptionEnabled` property is set to true on the input, a TranscribeStreamingRetryClient client is used to send audio bytes of the audio call to Transcribe. As the transcript segments are being returned, they are saved in a DynamoDB table having ContactId as the Partition key and StartTime of the segment as the Sort key. The audio bytes are also saved in a file along with this and at the end of the audio call, if the `saveCallRecording` property is set to true on the input, the WAV audio file is uploaded to S3 in the provided `RECORDINGS_BUCKET_NAME` bucket.
 
@@ -81,8 +80,7 @@ This Lambda Function has environment variables that control its behavior:
 * `RECORDINGS_PUBLIC_READ_ACL` - Set to TRUE to add public read ACL on audio file stored in S3. This will allow for anyone with S3 URL to download the audio file.
 * `INPUT_KEY_PREFIX` - The prefix for the AWS S3 file name provided in the Lambda request. This file is expected to be present in `RECORDINGS_BUCKET_NAME`
 * `CONSOLE_LOG_TRANSCRIPT_FLAG` - Needs to be set to TRUE if the Connect call transcriptions are to be logged.
-* `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts of the audio from the customer need to be saved (Table Partition key must be: `ContactId`, and Sort Key must be: `StartTime`)
-* `TABLE_CALLER_TRANSCRIPT_TO_CUSTOMER` - The DynamoDB table name where the transcripts of the audio to the customer need to be saved (Table Partition key must be: `ContactId`, and Sort Key must be: `StartTime`)
+* `TABLE_CALLER_TRANSCRIPT` - The DynamoDB table name where the transcripts of the audio from the customer need to be saved (Table Partition key must be: `pk`, and Sort Key must be: `sk`)
 * `SAVE_PARTIAL_TRANSCRIPTS` - Set to TRUE if partial segments need to saved in the DynamoDB table. Else, only complete segments will be persisted.
 * `START_SELECTOR_TYPE` - Set to NOW to get transcribe once the agent and user are connected. Set to FRAGMENT_NUMBER to start transcribing once the 'Start Media Streaming' block is executed in your contact flow
 

@@ -34,14 +34,16 @@ public class TranscribedSegmentWriter {
 
     private String contactId;
     private DynamoDB ddbClient;
+    private String prefix;
     private Boolean consoleLogTranscriptFlag;
     private static final boolean SAVE_PARTIAL_TRANSCRIPTS = Boolean.parseBoolean(System.getenv("SAVE_PARTIAL_TRANSCRIPTS"));
     private static final Logger logger = LoggerFactory.getLogger(TranscribedSegmentWriter.class);
 
-    public TranscribedSegmentWriter(String contactId, DynamoDB ddbClient, Boolean consoleLogTranscriptFlag) {
+    public TranscribedSegmentWriter(String contactId, DynamoDB ddbClient, String prefix, Boolean consoleLogTranscriptFlag) {
 
         this.contactId = Validate.notNull(contactId);
         this.ddbClient = Validate.notNull(ddbClient);
+        this.prefix = Validate.notNull(prefix);
         this.consoleLogTranscriptFlag = Validate.notNull(consoleLogTranscriptFlag);
     }
 
@@ -53,6 +55,12 @@ public class TranscribedSegmentWriter {
     public DynamoDB getDdbClient() {
 
         return this.ddbClient;
+    }
+
+
+    public String getPrefix() {
+
+        return this.prefix;
     }
 
     public void writeToDynamoDB(TranscriptEvent transcriptEvent, String tableName) {
@@ -79,7 +87,8 @@ public class TranscribedSegmentWriter {
 
     private Item toDynamoDbItem(Result result) {
 
-        String contactId = this.getContactId();
+        String pk = "CONNECT_TRANSCRIPTION#!#"+this.getContactId();
+        String sk = this.getPrefix() + "#!#" + Double.toString(result.startTime());
         Item ddbItem = null;
 
         NumberFormat nf = NumberFormat.getInstance();
@@ -91,14 +100,15 @@ public class TranscribedSegmentWriter {
 
                 Instant now = Instant.now();
                 ddbItem = new Item()
-                        .withKeyComponent("ContactId", contactId)
-                        .withKeyComponent("StartTime", result.startTime())
+                        .withKeyComponent("pk", pk)
+                        .withKeyComponent("sk", sk)
                         .withString("SegmentId", result.resultId())
                         .withDouble("EndTime", result.endTime())
                         .withString("Transcript", result.alternatives().get(0).transcript())
                         .withBoolean("IsPartial", result.isPartial())
                         // LoggedOn is an ISO-8601 string representation of when the entry was created
                         .withString("LoggedOn", now.toString())
+                        .withString("contactId",this.getContactId())
                         // expire after a week by default
                         .withDouble("ExpiresAfter", now.plusSeconds(7 * 24 * 3600).toEpochMilli() / 1000);
 

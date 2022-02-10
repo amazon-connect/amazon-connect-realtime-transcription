@@ -89,21 +89,23 @@ function updateDynamo(event){
     var tableName = process.env.table_name;
     var currentTimeStamp = new Date().toString();
     var currentDate = new Date().toLocaleDateString();
-
+    const dlm = "#!#"
     //set up the database query to be used to update the customer information record in DynamoDB
     var paramsUpdate = {
         TableName: tableName,
         Key: {
-            "contactId": contactId
+            "pk": `CONNECT_TRANSCRIPTION${dlm}${contactId}`,
+            "sk": `TRANSCRIPTION_SUMMARY`
         },
 
         ExpressionAttributeValues: {
             ":var1": customerPhoneNumber,
             ":var2": currentDate,
-            ":var3": currentTimeStamp
+            ":var3": currentTimeStamp,
+            ":var4": event,
         },
 
-        UpdateExpression: "SET customerPhoneNumber = :var1, callDate = :var2, callTimestamp = :var3"
+        UpdateExpression: "SET customerPhoneNumber = :var1, callDate = :var2, callTimestamp = :var3, event = :var4"
     };
 
     //update the customer record in the database with the new call information using the paramsUpdate query we setup above:
