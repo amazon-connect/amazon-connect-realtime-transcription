@@ -94,6 +94,7 @@ public final class KVSUtils {
                 mkvElement.accept(fragmentVisitor);
                 if (MkvTypeInfos.SIMPLEBLOCK.equals(mkvElement.getElementMetaData().getTypeInfo())) {
                     MkvDataElement dataElement = (MkvDataElement) mkvElement;
+                    @SuppressWarnings("unchecked")
                     Frame frame = ((MkvValue<Frame>) dataElement.getValueCopy()).getVal();
                     ByteBuffer audioBuffer = frame.getFrameData();
 

@@ -7,8 +7,6 @@ import com.amazonaws.kvstranscribestreaming.KVSUtils;
 import org.apache.commons.lang3.Validate;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioEvent;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
@@ -40,8 +38,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 public class KVSByteToAudioEventSubscription implements Subscription {
-
-    private static final Logger logger = LoggerFactory.getLogger(KVSByteToAudioEventSubscription.class);
 
     private static final int CHUNK_SIZE_IN_KB = 4;
     private ExecutorService executor = Executors.newFixedThreadPool(1); // Change nThreads here!! used in SubmissionPublisher not subscription

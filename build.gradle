@@ -10,10 +10,9 @@ repositories {
 }
 
 dependencies {
-    compile fileTree(dir: 'jars', include: '*.jar')
-    compile group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.2'
-    compile group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.2.1'
-    compile(
+    implementation group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.2'
+    implementation group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.2.1'
+    implementation(
             'software.amazon.awssdk:transcribestreaming:2.16.30',
 
             'com.amazonaws:aws-java-sdk-dynamodb:1.11.987',
@@ -33,6 +32,7 @@ dependencies {
 }
 
 task buildZip(type: Zip) {
+    archiveBaseName = 'kvs_transcribe_streaming_lambda'
     from compileJava
     from processResources
 

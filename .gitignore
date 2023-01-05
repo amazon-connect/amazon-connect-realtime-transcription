@@ -2,6 +2,8 @@
 dist/.DS_Store
 .gradle/*
 build/
+# Due to VSCode Java plugin; see https://github.com/redhat-developer/vscode-java/issues/634
+bin/ 
 
 # misc
 .DS_Store

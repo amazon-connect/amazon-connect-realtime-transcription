@@ -3,7 +3,6 @@ package com.amazonaws.kvstranscribestreaming;
 import com.amazonaws.kinesisvideo.parser.utilities.FragmentMetadata;
 import com.amazonaws.kinesisvideo.parser.utilities.FragmentMetadataVisitor;
 import com.amazonaws.kinesisvideo.parser.utilities.MkvTag;
-import com.amazonaws.transcribestreaming.KVSByteToAudioEventSubscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,9 +30,9 @@ public class KVSContactTagProcessor implements FragmentMetadataVisitor.MkvTagPro
                 sameContact = true;
             }
             else {
-                logger.info("Contact Id in tag does not match expected, will stop streaming. "
+                logger.info(String.format("Contact Id in tag does not match expected, will stop streaming. "
                                 + "contact id: %s, expected: %s",
-                        mkvTag.getTagValue(), contactId);
+                        mkvTag.getTagValue(), contactId));
                 sameContact = false;
             }
         }

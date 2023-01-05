@@ -54,7 +54,7 @@ Getting started with this project is easy. The most basic use case of capturing 
 - Create an S3 bucket and create a new folder “deployment” and upload the deployment/ folder into it
     - Open the `cloudformation.template` file and copy the S3 url on it's detail page
 - Go to CloudFormation and select 'Create Stack'.
-    - Create the stack from an S3 url and paste the url from the cloudformation.yaml file
+    - Create the stack from an S3 url and paste the url from the cloudformation.template file
     - Fill in the parameters for the stack. The existingS3BucketName and existingS3Path should be the ones created above that contain all the deployment related code.
 ![](images/cloud-formation-stack-parameters.png)
 - While the stack is building, go to the Amazon Connect AWS console and ensure that your Amazon Connect instance has the "live media streaming" feature enabled by following the [Amazon Connect documentation](https://docs.aws.amazon.com/connect/latest/userguide/customer-voice-streams.html) for "Enable Live Media Streaming"
@@ -70,7 +70,7 @@ Getting started with this project is easy. The most basic use case of capturing 
 ![](images/connect-configure-phone-number.png)
 
 ### Building the KVS Transcriber project
-The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. The code also depends on the [AWS Kinesis Video Streams Parser Library](https://github.com/aws/amazon-kinesis-video-streams-parser-library) which has been built into a jar can be found in the jars folder. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application. After running `gradle build`, the updated zip file can be found in the `build/distributions` folder
+The lambda code is designed to be built with Gradle. All requisite dependencies are captured in the `build.gradle` file. Simply use `gradle build` to build the zip that can be deployed as an AWS Lambda application. After running `gradle build`, the updated zip file can be found in the `build/distributions` folder; copy it to the `deployment` folder then follow the Easy Setup steps above. Other files in the `deployment` folder are zip archives, each containing an individual file from the `functions` folder. The `layer.zip` file is produced by the Connect Audio Utils project; see the Audio Utils section below for further info.
 
 ### Lambda Environment Variables
 This Lambda Function has environment variables that control its behavior:
@@ -117,7 +117,7 @@ The following is a sample invocation event:
 ```
 ## Audio Utils
 This solution uses the Connect Audio Utils project for combining audio files. For details on the building Connect Audio Utils see this link. 
-[Amazon Connect Audio Utils] https://github.com/amazon-connect/amazon-connect-audio-utils
+[Amazon Connect Audio Utils](https://github.com/amazon-connect/amazon-connect-audio-utils)
 ## License Summary
 This sample code is made available under a modified MIT license. See the LICENSE file.
 
